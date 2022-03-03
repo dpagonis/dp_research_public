@@ -100,6 +100,14 @@ class VBS_May13:
     self.OA_vol = OACalc
     self.OA = self.OA_vol / self.StdToVol
 
+  def Plot(self):
+      plt.bar(range(len(self.CStar_298)),self.VBSMass_vol,tick_label=[str(cs) for cs in self.CStar_298])
+      OAbars = self.Fp * self.VBSMass_vol
+      plt.bar(range(len(self.CStar_298)),OAbars)
+      plt.xlabel('C*298 (ug m-3)')
+      plt.ylabel('Concentration (ug m-3)')
+      plt.show()
+
   def __init__(self,Temp=None,Pres=None,VBSConc=None):
     self.Temp = 298.15 if Temp is None else Temp
     self.Pres = 1013.25 if Pres is None else Pres
