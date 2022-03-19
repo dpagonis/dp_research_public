@@ -43,16 +43,12 @@ def DP_MeanFP(Temp,Pres_mbar):
 # ----------------------CLASSES-------------------------------------
 #-------------------------------------------------------------------
 
-class VBS_May13:
-  #VBS defined in May et al JGRA 2013 (https://doi.org/10.1002/jgrd.50828)
+
+class VBS:
   #This class is **always** at equilibirum
   #initialize with Temp (K), Pressure (mbar), and Total mass concentration of VBS (ug sm-3)
   #outputs: equilibrium OA concentrations at self.OA and self.OA_vol (ug sm-3 and ug m-3, respectively)
   #if you know OA but not total VBS conc, use self.SetOAConc(OA_std) to automatically find the total VBS conc.
-
-  Fi = np.array([0.2,0,0.1,0.1,0.2,0.1,0.3])
-  CStar_298 = np.array([10**(i-2) for i in range(7)])
-  dHvap = np.array([(85-4*math.log10(x))*1000 for x in CStar_298])
 
   def Clausius_Clapeyron(self, Cstar298 , T , dH_298):
     Cstar = ((Cstar298*298.15)/T)*math.e**((dH_298/8.3145)*((1/298.15)-(1/T)))
@@ -106,6 +102,8 @@ class VBS_May13:
       plt.bar(range(len(self.CStar_298)),OAbars)
       plt.xlabel('C*298 (ug m-3)')
       plt.ylabel('Concentration (ug m-3)')
+      plt.figtext(0.2,0.9,'VBS = %s\nVBS = %.02f ug sm-3\nOA = %.02f ug sm-3' % (self.Name,self.VBSConc, self.OA))
+      plt.figtext(0.6,0.9,'T = %.01f K\nP = %.0f mbar' % (self.Temp,self.Pres))
       plt.show()
 
   def __init__(self,Temp=None,Pres=None,VBSConc=None):
@@ -115,4 +113,20 @@ class VBS_May13:
     self.CStar = [self.Clausius_Clapeyron(cs , self.Temp , dH) for cs,dH in zip(self.CStar_298,self.dHvap)]
     self.OA = self.VBSConc / 2
     self.PartitionVBS()
+#end of class VBS
+
+class VBS_May13(VBS):
+  #VBS defined in May et al JGRA 2013 (https://doi.org/10.1002/jgrd.50828)
+  Name = "May_2013_JGRA"
+  Fi = np.array([0.2,0,0.1,0.1,0.2,0.1,0.3])
+  CStar_298 = np.array([10**(i-2) for i in range(7)])
+  dHvap = np.array([(85-4*math.log10(x))*1000 for x in CStar_298])
 #end of class VBS_May13
+
+class VBS_FIREX(VBS):
+    #VBS fitted to FIREX-AQ thermal denuder data
+    Name = "FIREX-AQ"
+    Fi = np.array([0.333333,0.166667,0.166667,0.333333])
+    CStar_298 = np.array([0.01,0.1,100,10000])
+    dHvap = np.array([(131-11*math.log10(x))*1000 for x in CStar_298])
+  #end of class VBS_FIREX
