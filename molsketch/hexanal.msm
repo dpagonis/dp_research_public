@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<molecule name="hexanal">
+    <atomArray>
+        <atom id="a1" elementType="C" userCharge="0" disableHydrogens="0" hydrogens="0" shapeType="0" hydrogenAlignment="0" colorR="0" colorG="0" colorB="0" scalingParameter="1" zLevel="3" coordinates="-385.303,-190.829"/>
+        <atom id="a2" elementType="C" userCharge="0" disableHydrogens="0" hydrogens="0" shapeType="0" hydrogenAlignment="0" colorR="0" colorG="0" colorB="0" scalingParameter="1" zLevel="3" coordinates="-363.653,-203.329"/>
+        <atom id="a3" elementType="C" userCharge="0" disableHydrogens="0" hydrogens="0" shapeType="0" hydrogenAlignment="0" colorR="0" colorG="0" colorB="0" scalingParameter="1" zLevel="3" coordinates="-406.954,-203.329"/>
+        <atom id="a4" elementType="C" userCharge="0" disableHydrogens="0" hydrogens="0" shapeType="0" hydrogenAlignment="0" colorR="0" colorG="0" colorB="0" scalingParameter="1" zLevel="3" coordinates="-428.604,-190.829"/>
+        <atom id="a5" elementType="C" userCharge="0" disableHydrogens="0" hydrogens="0" shapeType="0" hydrogenAlignment="0" colorR="0" colorG="0" colorB="0" scalingParameter="1" zLevel="3" coordinates="-450.255,-203.329"/>
+        <atom id="a6" elementType="C" userCharge="0" disableHydrogens="0" hydrogens="0" shapeType="0" hydrogenAlignment="0" colorR="0" colorG="0" colorB="0" scalingParameter="1" zLevel="3" coordinates="-471.906,-190.829"/>
+        <atom id="a7" elementType="O" userCharge="0" disableHydrogens="0" hydrogens="0" shapeType="0" hydrogenAlignment="0" colorR="0" colorG="0" colorB="0" scalingParameter="1" zLevel="3" coordinates="-363.653,-228.329"/>
+        <atom id="a8" elementType="H" userCharge="0" disableHydrogens="0" hydrogens="0" shapeType="0" hydrogenAlignment="0" colorR="0" colorG="0" colorB="0" scalingParameter="1" zLevel="3" coordinates="-342.002,-190.829"/>
+    </atomArray>
+    <bondArray>
+        <bond atomRefs2="a1 a2" type="10" colorR="0" colorG="0" colorB="0" scalingParameter="1" zLevel="2" coordinates="-385.303,-190.829;-363.653,-203.329"/>
+        <bond atomRefs2="a1 a3" type="10" colorR="0" colorG="0" colorB="0" scalingParameter="1" zLevel="2" coordinates="-385.303,-190.829;-406.954,-203.329"/>
+        <bond atomRefs2="a3 a4" type="10" colorR="0" colorG="0" colorB="0" scalingParameter="1" zLevel="2" coordinates="-406.954,-203.329;-428.604,-190.829"/>
+        <bond atomRefs2="a4 a5" type="10" colorR="0" colorG="0" colorB="0" scalingParameter="1" zLevel="2" coordinates="-428.604,-190.829;-450.255,-203.329"/>
+        <bond atomRefs2="a5 a6" type="10" colorR="0" colorG="0" colorB="0" scalingParameter="1" zLevel="2" coordinates="-450.255,-203.329;-471.906,-190.829"/>
+        <bond atomRefs2="a2 a7" type="23" colorR="0" colorG="0" colorB="0" scalingParameter="1" zLevel="2" coordinates="-363.653,-203.329;-363.653,-228.329"/>
+        <bond atomRefs2="a2 a8" type="10" colorR="0" colorG="0" colorB="0" scalingParameter="1" zLevel="2" coordinates="-363.653,-203.329;-342.002,-190.829"/>
+    </bondArray>
+</molecule>

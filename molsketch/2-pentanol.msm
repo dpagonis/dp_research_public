@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<molecule name="2-pentanol">
+    <atomArray>
+        <atom id="a1" elementType="C" userCharge="0" disableHydrogens="0" hydrogens="0" shapeType="0" hydrogenAlignment="0" colorR="0" colorG="0" colorB="0" scalingParameter="1" zLevel="3" coordinates="-693.637,-8.65338"/>
+        <atom id="a2" elementType="C" userCharge="0" disableHydrogens="0" hydrogens="0" shapeType="0" hydrogenAlignment="0" colorR="0" colorG="0" colorB="0" scalingParameter="1" zLevel="3" coordinates="-671.986,-21.1534"/>
+        <atom id="a3" elementType="C" userCharge="0" disableHydrogens="0" hydrogens="0" shapeType="0" hydrogenAlignment="0" colorR="0" colorG="0" colorB="0" scalingParameter="1" zLevel="3" coordinates="-650.336,-8.65338"/>
+        <atom id="a4" elementType="C" userCharge="0" disableHydrogens="0" hydrogens="0" shapeType="0" hydrogenAlignment="0" colorR="0" colorG="0" colorB="0" scalingParameter="1" zLevel="3" coordinates="-628.685,-21.1534"/>
+        <atom id="a5" elementType="C" userCharge="0" disableHydrogens="0" hydrogens="0" shapeType="0" hydrogenAlignment="0" colorR="0" colorG="0" colorB="0" scalingParameter="1" zLevel="3" coordinates="-607.034,-8.65338"/>
+        <atom id="a6" elementType="O" userCharge="0" disableHydrogens="0" hydrogens="0" shapeType="0" hydrogenAlignment="0" colorR="0" colorG="0" colorB="0" scalingParameter="1" zLevel="3" coordinates="-628.685,-46.1534"/>
+    </atomArray>
+    <bondArray>
+        <bond atomRefs2="a1 a2" type="10" colorR="0" colorG="0" colorB="0" scalingParameter="1" zLevel="2" coordinates="-693.637,-8.65338;-671.986,-21.1534"/>
+        <bond atomRefs2="a2 a3" type="10" colorR="0" colorG="0" colorB="0" scalingParameter="1" zLevel="2" coordinates="-671.986,-21.1534;-650.336,-8.65338"/>
+        <bond atomRefs2="a3 a4" type="10" colorR="0" colorG="0" colorB="0" scalingParameter="1" zLevel="2" coordinates="-650.336,-8.65338;-628.685,-21.1534"/>
+        <bond atomRefs2="a4 a5" type="10" colorR="0" colorG="0" colorB="0" scalingParameter="1" zLevel="2" coordinates="-628.685,-21.1534;-607.034,-8.65338"/>
+        <bond atomRefs2="a4 a6" type="10" colorR="0" colorG="0" colorB="0" scalingParameter="1" zLevel="2" coordinates="-628.685,-21.1534;-628.685,-46.1534"/>
+    </bondArray>
+</molecule>
