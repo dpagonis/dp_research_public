@@ -112,7 +112,7 @@ class PB_Design:
           nCenter = self.yData.at[self.nReplicates-1,c+"_n"]
           effect = self.yData[c].sum()/nCenter
           effect_crit = scipy.stats.t.ppf(q=1-0.05/2,df=len(data.index)-2) * self.yData_sPooled.at['s_pooled',c] * (1/((self.Design['x0'].sum()-0.5)*self.yData[c+"_n"].mean())+1/nCenter)**0.5#(=ts(1/mk+1/C)^1/2)
-          self.curvature = True if effect>effect_crit else False
+          self.curvature.at[0,c] = True if effect>effect_crit else False
         print("")
         print("Curvature:")
         print(self.curvature)
