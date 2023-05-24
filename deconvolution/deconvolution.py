@@ -16,16 +16,20 @@ def AdjGuess(wG, wE, NSmooth): # Subtract error from guess
     wG = np.where(wG < 0, 0, wG)
     return wG
 
-# Sample inputs for testing
-wG = np.array([1, 2, 3, 4, 5])
-wE = np.array([0.5, 0.5, 0.5, 0.5, 0.5])
-NSmooth = 1
 
-# Call the function and store the modified wG
-modified_wG = AdjGuess(wG, wE, NSmooth)
 
-# Plot the original and modified wG
-plt.plot(wG, label='Original wG')
-plt.plot(modified_wG, label='Modified wG')
-plt.legend()
-plt.show()
+
+
+if __name__ == "__main__":
+    # this is where you put code for testing these functions
+    # Sample inputs for testing
+    wG = np.array([1, 2, 3, 4, 5])
+    wE = np.array([0.5, 0.5, 0.5, 0.5, 0.5])
+    NSmooth = 1
+    # Call the function and store the modified wG
+    modified_wG = AdjGuess(wG, wE, NSmooth)
+    # Plot the original and modified wG
+    plt.plot(wG, label='Original wG')
+    plt.plot(modified_wG, label='Modified wG')
+    plt.legend()
+    plt.show()
