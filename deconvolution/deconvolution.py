@@ -16,3 +16,6 @@ def AdjGuess(wG, wE, NSmooth):
     return wG
 
 
+if __name__ == "__main__":
+    # this is where you put code for testing these functions
+    print("hi")
