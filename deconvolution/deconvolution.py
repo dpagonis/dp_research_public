@@ -1,6 +1,7 @@
 import numpy as np
+import matplotlib.pyplot as plt
 
-def AdjGuess(wG, wE, NSmooth):
+def AdjGuess(wG, wE, NSmooth): # Subtract error from guess
     if NSmooth == 0 or NSmooth == 1:
         wG = wG.astype(float)  # Convert wG to float data type
         wG -= wE
@@ -15,4 +16,16 @@ def AdjGuess(wG, wE, NSmooth):
     wG = np.where(wG < 0, 0, wG)
     return wG
 
+# Sample inputs for testing
+wG = np.array([1, 2, 3, 4, 5])
+wE = np.array([0.5, 0.5, 0.5, 0.5, 0.5])
+NSmooth = 1
 
+# Call the function and store the modified wG
+modified_wG = AdjGuess(wG, wE, NSmooth)
+
+# Plot the original and modified wG
+plt.plot(wG, label='Original wG')
+plt.plot(modified_wG, label='Modified wG')
+plt.legend()
+plt.show()
