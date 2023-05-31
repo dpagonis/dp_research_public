@@ -75,78 +75,83 @@ def DP_FitDblExp(wY, wX, PtA=None, PtB=None, x0=None, x1=None, y0=None, y1=None,
     return popt, pcov, fitX, fitY
 
 if __name__ == "__main__":
-    # Read data from CSV file using pandas
-    csv_file_path = 'C:/Users/hjver/Documents/dp_research_public/deconvolution/data/2019_08_07_HNO3Data.csv'
-    data = pd.read_csv(csv_file_path)
 
-    # Define the indices or ranges of the subsets of data
-    subsets = [
-        (2107, 2407),  # Subset 1
-        (5525, 5825),  # Subset 2
-        (8998, 9298),   # Subset 3
-        (12689, 12989),  # Subset 4
-        # Add more subsets as needed
-    ]
+    # Load the data from the CSV file
+    data = pd.read_csv('C:/Users/hjver/Documents/dp_research_public/deconvolution/data/2019_08_07_HNO3Data.csv')
 
-    num_subsets = len(subsets)
-    num_columns = 2  # Number of columns in the subplot grid
+    # Extract the x, y, and z values from the data
+    x_values = data['time'].values
+    y_values = data['HNO3_191_Hz'].values
+    z_values = data['CalKey'].values
 
+    # Find the indices where z_values change from 1 to 0
+    change_indices = np.where((z_values[:-1] == 1) & (z_values[1:] == 0))[0]
+
+    # Define the number of data points to include after each change
+    data_points_after_change = 300
+
+    # Define the size of the subplot grid
+    num_subsets = len(change_indices)
+    num_columns = 2
     num_rows = (num_subsets + num_columns - 1) // num_columns
-    fig, axes = plt.subplots(num_rows, num_columns, figsize=(12, 8))
 
-    for i, subset in enumerate(subsets):
-        # Extract the subset of data to plot and fit
-        start_index, end_index = subset
-        x_csv_subset = data['time'][start_index:end_index]  # Replace 'x_column' with the actual column name for x values
-        y_csv_subset = data['HNO3_191_Hz'][start_index:end_index]  # Replace 'y_column' with the actual column name for y values
+    # Create the subplots
+    fig, axes = plt.subplots(num_rows, num_columns, figsize=(12, 6))
+
+    # Iterate over the subsets and plot the data
+    for i, change_index in enumerate(change_indices):
+        # Calculate the start and end indices for each subset
+        start_index = change_index
+        end_index = start_index + data_points_after_change
+
+        # Get the subset of x and y values
+        x_subset = x_values[start_index:end_index]
+        y_subset = y_values[start_index:end_index]
 
         # Call the fitting function with the subset of data
-        fitted_params, covariance, fitX, fitY = DP_FitDblExp(y_csv_subset, x_csv_subset)
+        fitted_params, covariance, fitX, fitY = DP_FitDblExp(y_subset, x_subset, PtA=start_index, PtB=end_index)
         print(fitted_params)
 
-        # Generate x values for plotting the curve
-        x_plot = np.linspace(min(x_csv_subset), max(x_csv_subset), 100)
+        # # Generate x values for plotting the curve
+        # x_plot = np.linspace(min(x_subset), max(x_subset), 100)
 
-        # Evaluate the fitted double exponential function at x_plot
-        y_plot = DP_DblExp_NormalizedIRF(x_plot, *fitted_params)
+        # # Evaluate the fitted double exponential function at x_plot
+        # y_plot = DP_DblExp_NormalizedIRF(x_plot, *fitted_params)
 
-        # Calculate the subplot indices based on the grid
-        row_index = i // num_columns
-        col_index = i % num_columns
-
-        # Create a new subplot for each subset
+        # Create the subplot for the current subset
         if num_rows > 1:
-            ax = axes[row_index, col_index]
+            ax = axes[i // num_columns, i % num_columns]
         else:
-            ax = axes[col_index]
+            ax = axes[i % num_columns]
 
         # Plot the original data points
-        ax.scatter(x_csv_subset, y_csv_subset, label='Data Subset')
+        ax.scatter(x_subset, y_subset, label='Data Subset', color='blue')
 
         # Plot the fitted curve
-        ax.plot(fitX, fitY, label='Fitted Curve')
+        ax.plot(fitX, fitY, label='Fitted Curve', color='red', zorder=2)
 
         # Set labels and title for the subplot
-        ax.set_xlabel('x')
-        ax.set_ylabel('y')
+        ax.set_xlabel('Time')
+        ax.set_ylabel('Hz')
         ax.set_title(f'Fitted Double Exponential Curve (Subset {i+1})')
 
         # Show legend for the subplot
         ax.legend()
 
-    # Hide unused subplots
-    if num_subsets < num_rows * num_columns:
-        for i in range(num_subsets, num_rows * num_columns):
-            if num_rows > 1:
-                ax = axes[i // num_columns, i % num_columns]
-            else:
-                ax = axes[i % num_columns]
-            ax.axis('off')
+        # Display fit information
+        fit_info = f"A1: {fitted_params[0]:.4f}\n" \
+               f"tau1: {fitted_params[1]:.4f}\n" \
+               f"tau2: {fitted_params[2]:.4f}"
+        ax.text(0.7, 0.5, fit_info, transform=ax.transAxes, bbox=dict(facecolor='white', edgecolor='gray'))
 
-    # Adjust the spacing between subplots
-    plt.tight_layout()
+        # Adjust the spacing between subplots
+        plt.tight_layout()
 
-    # Display all the subplots
+    # Display all the subplots in the same window
     plt.show()
+
+
+
+
 
 
