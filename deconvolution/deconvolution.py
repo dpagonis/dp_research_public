@@ -74,10 +74,11 @@ def DP_FitDblExp(wY, wX, PtA=None, PtB=None, x0=None, x1=None, y0=None, y1=None,
     
     return popt, pcov, fitX, fitY
 
-if __name__ == "__main__":
-
+def plot_and_save_data(csv_filename, directory):
     # Load the data from the CSV file
-    data = pd.read_csv('C:/Users/hjver/Documents/dp_research_public/deconvolution/data/2019_08_07_HNO3Data.csv')
+    csv_filename = '2019_08_07_HNO3Data.csv'  # Replace with the actual filename
+    directory ='C:/Users/hjver/Documents/dp_research_public/deconvolution/data/'
+    data = pd.read_csv(directory+csv_filename)
 
     # Extract the x, y, and z values from the data
     x_values = data['time'].values
@@ -98,6 +99,9 @@ if __name__ == "__main__":
     # Create the subplots
     fig, axes = plt.subplots(num_rows, num_columns, figsize=(12, 6))
 
+    # Create a list to store the fit information
+    fit_info_list = [['time', 'A1', 'Tau1', 'A2', 'Tau2']]
+
     # Iterate over the subsets and plot the data
     for i, change_index in enumerate(change_indices):
         # Calculate the start and end indices for each subset
@@ -108,15 +112,14 @@ if __name__ == "__main__":
         x_subset = x_values[start_index:end_index]
         y_subset = y_values[start_index:end_index]
 
-        # Call the fitting function with the subset of data
-        fitted_params, covariance, fitX, fitY = DP_FitDblExp(y_subset, x_subset, PtA=start_index, PtB=end_index)
-        print(fitted_params)
+        # Get the corresponding subset of column values from the data
+        column_subset = data.loc[start_index:end_index - 1, ['I_127_Hz', 'IH20_145_Hz']]
 
-        # # Generate x values for plotting the curve
-        # x_plot = np.linspace(min(x_subset), max(x_subset), 100)
+        # Modify the data points
+        normalized_y = (y_subset / (column_subset['I_127_Hz'] + column_subset['IH20_145_Hz'])) * 10 ** 6
 
-        # # Evaluate the fitted double exponential function at x_plot
-        # y_plot = DP_DblExp_NormalizedIRF(x_plot, *fitted_params)
+        # Call the fitting function with the modified subset of data
+        fitted_params, covariance, fitX, fitY = DP_FitDblExp(normalized_y, x_subset)
 
         # Create the subplot for the current subset
         if num_rows > 1:
@@ -125,30 +128,63 @@ if __name__ == "__main__":
             ax = axes[i % num_columns]
 
         # Plot the original data points
-        ax.scatter(x_subset, y_subset, label='Data Subset', color='blue')
+        ax.scatter(x_subset, normalized_y, label='Normalized Data Subset', color='blue')
 
         # Plot the fitted curve
         ax.plot(fitX, fitY, label='Fitted Curve', color='red', zorder=2)
 
-        # Set labels and title for the subplot
+        # Add labels and title
         ax.set_xlabel('Time')
         ax.set_ylabel('Hz')
-        ax.set_title(f'Fitted Double Exponential Curve (Subset {i+1})')
+        ax.set_title(f'Subset {i + 1}')
 
-        # Show legend for the subplot
+        # Add the fit information to the plot
+        num_params = len(fitted_params)
+        if num_params == 3:
+            fit_info = f'A1={fitted_params[0]:.2f}, T1={fitted_params[1]:.2f}, T2={fitted_params[2]:.2f}'
+        elif num_params == 4:
+            fit_info = f'A1={fitted_params[0]:.2f}, T1={fitted_params[1]:.2f}, A2={fitted_params[2]:.2f}, T2={fitted_params[3]:.2f}'
+        else:
+            fit_info = 'Unknown fit information'
+        ax.text(0.05, 0.9, fit_info, transform=ax.transAxes)
+
+        # Add a legend to the plot
         ax.legend()
-
         # Display fit information
         fit_info = f"A1: {fitted_params[0]:.4f}\n" \
-               f"tau1: {fitted_params[1]:.4f}\n" \
-               f"tau2: {fitted_params[2]:.4f}"
+                   f"tau1: {fitted_params[1]:.4f}\n" \
+                   f"tau2: {fitted_params[2]:.4f}"
         ax.text(0.7, 0.5, fit_info, transform=ax.transAxes, bbox=dict(facecolor='white', edgecolor='gray'))
 
-        # Adjust the spacing between subplots
-        plt.tight_layout()
+        fit_info_list.append([x_subset[0], fitted_params[0], fitted_params[1], 1 - fitted_params[0],
+                              fitted_params[2]])
+
+    # Adjust the spacing between subplots
+    plt.tight_layout()
+
+    # Save the figure as a PNG file
+    plt.savefig(directory + 'DblExp Fit Normalized.png')
+
+    # Close the figure
+    plt.close()
+
+    # Extract the date from the CSV filename
+    date_str = csv_filename[:10]  # Extract the first 10 characters as the date
+
+    # Save the fit information as a CSV file with the extracted date
+    filename = f'{date_str}_InstrumentResponseFunction.csv'
+    fit_info_df = pd.DataFrame(fit_info_list)
+    fit_info_df.to_csv(directory + filename, index=False, header=False)
 
     # Display all the subplots in the same window
     plt.show()
+
+if __name__ == "__main__":
+
+
+   
+        
+
 
 
 
