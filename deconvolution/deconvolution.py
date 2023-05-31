@@ -40,7 +40,7 @@ def DP_FitDblExp(wY, wX, PtA=None, PtB=None, x0=None, x1=None, y0=None, y1=None,
         PtB = int(np.interp(x1, wX, np.arange(len(wX))))
 
     if y0 is None:
-        y0 = wY[PtB]
+        y0 = np.mean(wY[-20:])
 
     NormFactor = wY[PtA]  # Store the normalization factor
 
@@ -79,37 +79,74 @@ if __name__ == "__main__":
     csv_file_path = 'C:/Users/hjver/Documents/dp_research_public/deconvolution/data/2019_08_07_HNO3Data.csv'
     data = pd.read_csv(csv_file_path)
 
-    # Define the indices or range of the subset of data to plot and fit
-    start_index = 2107
-    end_index = 2407
+    # Define the indices or ranges of the subsets of data
+    subsets = [
+        (2107, 2407),  # Subset 1
+        (5525, 5825),  # Subset 2
+        (8998, 9298),   # Subset 3
+        (12689, 12989),  # Subset 4
+        # Add more subsets as needed
+    ]
 
-    # Extract the subset of data to plot and fit
-    x_csv_subset = data['time'][start_index:end_index]  # Replace 'x_column' with the actual column name for x values
-    y_csv_subset = data['HNO3_191_Hz'][start_index:end_index]  # Replace 'y_column' with the actual column name for y values
+    num_subsets = len(subsets)
+    num_columns = 2  # Number of columns in the subplot grid
 
-    # Call the fitting function with the subset of data
-    fitted_params, covariance, fitX, fitY = DP_FitDblExp(y_csv_subset, x_csv_subset)
-    print(fitted_params)
-    # Generate x values for plotting the curve
-    x_plot = np.linspace(min(x_csv_subset), max(x_csv_subset), 100)
+    num_rows = (num_subsets + num_columns - 1) // num_columns
+    fig, axes = plt.subplots(num_rows, num_columns, figsize=(12, 8))
 
-    # Evaluate the fitted double exponential function at x_plot
-    y_plot = DP_DblExp_NormalizedIRF(x_plot, *fitted_params)
+    for i, subset in enumerate(subsets):
+        # Extract the subset of data to plot and fit
+        start_index, end_index = subset
+        x_csv_subset = data['time'][start_index:end_index]  # Replace 'x_column' with the actual column name for x values
+        y_csv_subset = data['HNO3_191_Hz'][start_index:end_index]  # Replace 'y_column' with the actual column name for y values
 
-    # Plot the original data points
-    plt.scatter(x_csv_subset, y_csv_subset, label='Data Subset')
+        # Call the fitting function with the subset of data
+        fitted_params, covariance, fitX, fitY = DP_FitDblExp(y_csv_subset, x_csv_subset)
+        print(fitted_params)
 
-    # Plot the fitted curve
-    plt.plot(fitX, fitY, label='Fitted Curve')
+        # Generate x values for plotting the curve
+        x_plot = np.linspace(min(x_csv_subset), max(x_csv_subset), 100)
 
-    # Set labels and title
-    plt.xlabel('x')
-    plt.ylabel('y')
-    plt.title('Fitted Double Exponential Curve (Subset)')
+        # Evaluate the fitted double exponential function at x_plot
+        y_plot = DP_DblExp_NormalizedIRF(x_plot, *fitted_params)
 
-    # Show legend
-    plt.legend()
+        # Calculate the subplot indices based on the grid
+        row_index = i // num_columns
+        col_index = i % num_columns
 
-    # Display the plot
+        # Create a new subplot for each subset
+        if num_rows > 1:
+            ax = axes[row_index, col_index]
+        else:
+            ax = axes[col_index]
+
+        # Plot the original data points
+        ax.scatter(x_csv_subset, y_csv_subset, label='Data Subset')
+
+        # Plot the fitted curve
+        ax.plot(fitX, fitY, label='Fitted Curve')
+
+        # Set labels and title for the subplot
+        ax.set_xlabel('x')
+        ax.set_ylabel('y')
+        ax.set_title(f'Fitted Double Exponential Curve (Subset {i+1})')
+
+        # Show legend for the subplot
+        ax.legend()
+
+    # Hide unused subplots
+    if num_subsets < num_rows * num_columns:
+        for i in range(num_subsets, num_rows * num_columns):
+            if num_rows > 1:
+                ax = axes[i // num_columns, i % num_columns]
+            else:
+                ax = axes[i % num_columns]
+            ax.axis('off')
+
+    # Adjust the spacing between subplots
+    plt.tight_layout()
+
+    # Display all the subplots
     plt.show()
+
 
