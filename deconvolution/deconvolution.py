@@ -1,7 +1,10 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
 from scipy.optimize import curve_fit
 import pandas as pd
+from datetime import datetime, timedelta
+
 
 def AdjGuess(wG, wE, NSmooth): # Subtract error from guess
     if NSmooth == 0 or NSmooth == 1:
@@ -74,16 +77,24 @@ def DP_FitDblExp(wY, wX, PtA=None, PtB=None, x0=None, x1=None, y0=None, y1=None,
     
     return popt, pcov, fitX, fitY
 
+def igor_to_datetime(igor_timestamp):
+    base_datetime = datetime(1904, 1, 1)
+    return base_datetime + timedelta(seconds=igor_timestamp)
+
 def plot_and_save_data(csv_filename, directory):
     # Load the data from the CSV file
-    csv_filename = '2019_08_07_HNO3Data.csv'  # Replace with the actual filename
-    directory ='C:/Users/hjver/Documents/dp_research_public/deconvolution/data/'
     data = pd.read_csv(directory+csv_filename)
 
+    # Extract the date from the CSV filename
+    date_str = csv_filename[:10]  # Extract the first 10 characters as the date
+
     # Extract the x, y, and z values from the data
-    x_values = data['time'].values
+    x_values_numeric = data['time'].values
+    x_values_datetime = data['time'].apply(igor_to_datetime).values
     y_values = data['HNO3_191_Hz'].values
     z_values = data['CalKey'].values
+
+    
 
     # Find the indices where z_values change from 1 to 0
     change_indices = np.where((z_values[:-1] == 1) & (z_values[1:] == 0))[0]
@@ -109,7 +120,8 @@ def plot_and_save_data(csv_filename, directory):
         end_index = start_index + data_points_after_change
 
         # Get the subset of x and y values
-        x_subset = x_values[start_index:end_index]
+        x_subset_numeric = x_values_numeric[start_index:end_index]
+        x_subset_datetime = x_values_datetime[start_index:end_index]
         y_subset = y_values[start_index:end_index]
 
         # Get the corresponding subset of column values from the data
@@ -119,7 +131,7 @@ def plot_and_save_data(csv_filename, directory):
         normalized_y = (y_subset / (column_subset['I_127_Hz'] + column_subset['IH20_145_Hz'])) * 10 ** 6
 
         # Call the fitting function with the modified subset of data
-        fitted_params, covariance, fitX, fitY = DP_FitDblExp(normalized_y, x_subset)
+        fitted_params, covariance, fitX, fitY = DP_FitDblExp(normalized_y, x_subset_numeric)
 
         # Create the subplot for the current subset
         if num_rows > 1:
@@ -128,48 +140,49 @@ def plot_and_save_data(csv_filename, directory):
             ax = axes[i % num_columns]
 
         # Plot the original data points
-        ax.scatter(x_subset, normalized_y, label='Normalized Data Subset', color='blue')
-
-        # Plot the fitted curve
-        ax.plot(fitX, fitY, label='Fitted Curve', color='red', zorder=2)
+        ax.scatter(x_values_datetime[start_index:end_index], normalized_y, label='m/z 191: 15N HNO3I', color='blue')
+        ax.plot(x_values_datetime[start_index:end_index], fitY, label='Fitted IRF', color='black', zorder=2)
 
         # Add labels and title
         ax.set_xlabel('Time')
-        ax.set_ylabel('Hz')
-        ax.set_title(f'Subset {i + 1}')
+        ax.set_ylabel('Signal (ncps)')
+        ax.set_title(f'Cal {i + 1}')
 
-        # Add the fit information to the plot
-        num_params = len(fitted_params)
-        if num_params == 3:
-            fit_info = f'A1={fitted_params[0]:.2f}, T1={fitted_params[1]:.2f}, T2={fitted_params[2]:.2f}'
-        elif num_params == 4:
-            fit_info = f'A1={fitted_params[0]:.2f}, T1={fitted_params[1]:.2f}, A2={fitted_params[2]:.2f}, T2={fitted_params[3]:.2f}'
-        else:
-            fit_info = 'Unknown fit information'
-        ax.text(0.05, 0.9, fit_info, transform=ax.transAxes)
+        # Add the fit information to the plot. currently redundant with the fit info box below
+        # num_params = len(fitted_params)
+        # if num_params == 3:
+        #     fit_info = f'A1={fitted_params[0]:.2f}, T1={fitted_params[1]:.2f}, A2={1-fitted_params[0]:.2f}, T2={fitted_params[2]:.2f}'
+        # elif num_params == 4:
+        #     fit_info = f'A1={fitted_params[0]:.2f}, T1={fitted_params[1]:.2f}, A2={fitted_params[2]:.2f}, T2={fitted_params[3]:.2f}'
+        # else:
+        #     fit_info = 'Unknown fit information'
+        # ax.text(0.05, 0.9, fit_info, transform=ax.transAxes)
 
         # Add a legend to the plot
         ax.legend()
         # Display fit information
         fit_info = f"A1: {fitted_params[0]:.4f}\n" \
                    f"tau1: {fitted_params[1]:.4f}\n" \
+                   f"A2: {1-fitted_params[0]:.4f}\n" \
                    f"tau2: {fitted_params[2]:.4f}"
-        ax.text(0.7, 0.5, fit_info, transform=ax.transAxes, bbox=dict(facecolor='white', edgecolor='gray'))
+        ax.text(0.3, 0.5, fit_info, transform=ax.transAxes, bbox=dict(facecolor='white', edgecolor='gray'))
+        # Create a DateFormatter for the time only
+        time_formatter = mdates.DateFormatter('%H:%M:%S')
 
-        fit_info_list.append([x_subset[0], fitted_params[0], fitted_params[1], 1 - fitted_params[0],
+        # Apply the formatter to the x-axis
+        ax.xaxis.set_major_formatter(time_formatter)
+
+        fit_info_list.append([x_subset_numeric[0], fitted_params[0], fitted_params[1], 1 - fitted_params[0],
                               fitted_params[2]])
 
     # Adjust the spacing between subplots
     plt.tight_layout()
 
     # Save the figure as a PNG file
-    plt.savefig(directory + 'DblExp Fit Normalized.png')
+    plt.savefig(directory + f'{date_str}_InstrumentResponseFunction.png')
 
     # Close the figure
     plt.close()
-
-    # Extract the date from the CSV filename
-    date_str = csv_filename[:10]  # Extract the first 10 characters as the date
 
     # Save the fit information as a CSV file with the extracted date
     filename = f'{date_str}_InstrumentResponseFunction.csv'
@@ -180,14 +193,7 @@ def plot_and_save_data(csv_filename, directory):
     plt.show()
 
 if __name__ == "__main__":
-
-
-   
-        
-
-
-
-
-
-
-
+    csv_filename = '2019_08_07_HNO3Data.csv'  # Replace with the actual filename
+    directory ='C:/Users/demetriospagonis/Box/github/dp_research_public/deconvolution/data/' #DP
+    # directory ='C:/Users/hjver/Documents/dp_research_public/deconvolution/data/' # HV
+    plot_and_save_data(csv_filename,directory)
