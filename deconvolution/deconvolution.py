@@ -208,7 +208,7 @@ def Deconvolve_DblExp(wX, wY, wDest, Tau1, A1, Tau2, A2, NIter, SmoothError):
 
     # Update wX_free to contain only the first N seconds
     wX_free = wX[:N] - wX[0]
-    kernel = np.zeros_like(wY)
+    kernel = np.zeros_like(wX_free)
     wError = wY.copy()
     wConv = np.zeros_like(wY)
     wLastConv = np.zeros_like(wY)
@@ -222,7 +222,10 @@ def Deconvolve_DblExp(wX, wY, wDest, Tau1, A1, Tau2, A2, NIter, SmoothError):
         
         # Perform convolution using numpy.convolve
         kernel = (A1 / Tau1) * np.exp(-wX_free / Tau1) + (A2 / Tau2) * np.exp(-wX_free / Tau2)
-        wConv = np.convolve(wDest, kernel, mode='same')
+        full_conv = np.convolve(wDest, kernel, mode='full')
+
+        # Correct the shift by selecting the appropriate portion of the convolution
+        wConv = full_conv[:len(wY)]
         
         wError[:] = wConv - wY
         LastR2 = R2
@@ -233,22 +236,46 @@ def Deconvolve_DblExp(wX, wY, wDest, Tau1, A1, Tau2, A2, NIter, SmoothError):
         else:
             print(f"Stopped deconv at N={ii}, %R2 change={(abs(R2 - LastR2) / LastR2) * 100}")
             break
+
+        # Plotting wY, wError, wDest, and wConv
+        fig, axs = plt.subplots(2, 2)
+        axs[0, 0].plot(wY, color='blue')
+        axs[0, 0].set_title('wY')
+
+        axs[0, 1].plot(wError, color='red')
+        axs[0, 1].set_title('wError')
+
+        axs[1, 0].plot(wDest, color='green')
+        axs[1, 0].set_title('wDest')
+
+        axs[1, 1].plot(wConv, color='purple')
+        axs[1, 1].set_title('wConv')
+
+        for ax in axs.flat:
+            ax.label_outer()
+
+        plt.savefig(f'debugplots/iteration_{ii}.png')  # save the figure to file
+        plt.close()  # close the figure to free up memory
     
     return wDest
 
 
 if __name__ == "__main__":
     # Load the data from the CSV file
-    data = pd.read_csv('C:/Users/hjver/Documents/dp_research_public/deconvolution/data/2019_08_07_HNO3Data.csv')
+    # data = pd.read_csv('C:/Users/hjver/Documents/dp_research_public/deconvolution/data/2019_08_07_HNO3Data.csv')
+    # wX = data['time'].values
+    # wY = data['HNO3_190_Hz'].values
+
+    data = pd.read_csv('C:/Users/hjver/Documents/dp_research_public/deconvolution/data/2023_06_05_testdata.csv')
     wX = data['time'].values
-    wY = data['HNO3_190_Hz'].values
+    wY = data['signal'].values
 
     # Set the parameters for deconvolution
     Tau1 = 5.0  # Replace with the desired value
     A1 = 0.7  # Replace with the desired value
     Tau2 = 75  # Replace with the desired value
     A2 = 1.0-A1  # Replace with the desired value
-    NIter = 3  # Replace with the desired value
+    NIter = 10  # Replace with the desired value
     SmoothError = 5  # Replace with the desired value
     
     # Deconvolution
