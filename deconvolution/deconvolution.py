@@ -6,20 +6,21 @@ import pandas as pd
 from datetime import datetime, timedelta
 
 
-def AdjGuess(wG, wE, NSmooth): # Subtract error from guess
+def AdjGuess(wG, wE, NSmooth):
     if NSmooth == 0 or NSmooth == 1:
         wG = wG.astype(float)  # Convert wG to float data type
-        wG -= wE
+        wG -= wE  # subtract errors
     elif NSmooth > 1:
         wE_Smooth = np.convolve(wE, np.ones(NSmooth) / NSmooth, mode='same')
         wG = wG.astype(float)  # Convert wG to float data type
-        wG -= wE_Smooth
+        wG -= wE_Smooth  # subtract error
     else:
         print("Error (DP_AdjGuess in DP_Deconvolution): NSmooth =", NSmooth)
         raise ValueError("DP_AdjGuess in DP_Deconvolution was passed a bad value for NSmooth")
     
     wG = np.where(wG < 0, 0, wG)
     return wG
+
 
 def DP_DblExp_NormalizedIRF(x, A1, tau1, tau2):
     return A1 * np.exp(-x / tau1) + (1 - A1) * np.exp(-x / tau2)
@@ -93,8 +94,6 @@ def plot_and_save_data(csv_filename, directory):
     x_values_datetime = data['time'].apply(igor_to_datetime).values
     y_values = data['HNO3_191_Hz'].values
     z_values = data['CalKey'].values
-
-    
 
     # Find the indices where z_values change from 1 to 0
     change_indices = np.where((z_values[:-1] == 1) & (z_values[1:] == 0))[0]
@@ -192,8 +191,88 @@ def plot_and_save_data(csv_filename, directory):
     # Display all the subplots in the same window
     plt.show()
 
+def Deconvolve_DblExp(wX, wY, wDest, Tau1, A1, Tau2, A2, NIter, SmoothError):
+    # Deconvolution algorithm for DOUBLE EXPONENTIAL instrument function
+    # Takes input data wX (time) and wY (signal), writes deconvolved output to wDest
+    # Double-exponential instrument function defined by Tau1, A1, Tau2, A2
+    # NIter: number of iterations of the deconvolution algorithm, 0 is autostop
+    # SmoothError: number of time points to use for error smoothing. Set to 0 for no smoothing
+    
+    if wDest is None:
+        wDest = np.zeros_like(wY)
+    
+    ForceIterations = 1 if NIter != 0 else 0
+    NIter = 100 if NIter == 0 else NIter
+    
+    N = int(5 * max(Tau1, Tau2)) # Calculate the desired duration
+
+    # Update wX_free to contain only the first N seconds
+    wX_free = wX[:N] - wX[0]
+    kernel = np.zeros_like(wY)
+    wError = wY.copy()
+    wConv = np.zeros_like(wY)
+    wLastConv = np.zeros_like(wY)
+    wDest = wY 
+
+    LastR2 = 0.01
+    R2 = 0.01
+    
+    for ii in range(NIter):
+        wLastConv[:] = wConv[:]
+        
+        # Perform convolution using numpy.convolve
+        kernel = (A1 / Tau1) * np.exp(-wX_free / Tau1) + (A2 / Tau2) * np.exp(-wX_free / Tau2)
+        wConv = np.convolve(wDest, kernel, mode='same')
+        
+        wError[:] = wConv - wY
+        LastR2 = R2
+        R2 = np.corrcoef(wConv, wY)[0, 1] ** 2
+        
+        if ((abs(R2 - LastR2) / LastR2) * 100 > 1) or (ForceIterations == 1):
+            wDest = AdjGuess(wDest, wError, SmoothError)
+        else:
+            print(f"Stopped deconv at N={ii}, %R2 change={(abs(R2 - LastR2) / LastR2) * 100}")
+            break
+    
+    return wDest
+
+
 if __name__ == "__main__":
-    csv_filename = '2019_08_07_HNO3Data.csv'  # Replace with the actual filename
-    directory ='C:/Users/demetriospagonis/Box/github/dp_research_public/deconvolution/data/' #DP
-    # directory ='C:/Users/hjver/Documents/dp_research_public/deconvolution/data/' # HV
-    plot_and_save_data(csv_filename,directory)
+    # Load the data from the CSV file
+    data = pd.read_csv('C:/Users/hjver/Documents/dp_research_public/deconvolution/data/2019_08_07_HNO3Data.csv')
+    wX = data['time'].values
+    wY = data['HNO3_190_Hz'].values
+
+    # Set the parameters for deconvolution
+    Tau1 = 5.0  # Replace with the desired value
+    A1 = 0.7  # Replace with the desired value
+    Tau2 = 75  # Replace with the desired value
+    A2 = 1.0-A1  # Replace with the desired value
+    NIter = 3  # Replace with the desired value
+    SmoothError = 5  # Replace with the desired value
+    
+    # Deconvolution
+    wDest = np.zeros_like(wY)
+    wDest = Deconvolve_DblExp(wX, wY, wDest, Tau1, A1, Tau2, A2, NIter, SmoothError)
+
+    # Plot the figures
+    plt.figure(figsize=(10, 6))
+
+    # Original time series and deconvolution
+    plt.subplot(2, 1, 1)
+    plt.plot(wX, wY, label='Original')
+    plt.plot(wX, wDest, label='Deconvolution')
+    plt.xlabel('Time')
+    plt.ylabel('Signal')
+    plt.legend()
+
+    # Deconvolution only
+    plt.subplot(2, 1, 2)
+    plt.plot(wX, wDest, label='Deconvolution')
+    plt.xlabel('Time')
+    plt.ylabel('Signal')
+    plt.legend()
+
+    plt.tight_layout()
+    plt.show()
+
