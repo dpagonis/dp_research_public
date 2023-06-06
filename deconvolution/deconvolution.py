@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from scipy.optimize import curve_fit
+from scipy.signal import resample
 import pandas as pd
 from datetime import datetime, timedelta
 import glob
@@ -200,8 +201,10 @@ def Deconvolve_DblExp(wX, wY, wDest, Tau1, A1, Tau2, A2, NIter, SmoothError):
     # NIter: number of iterations of the deconvolution algorithm, 0 is autostop
     # SmoothError: number of time points to use for error smoothing. Set to 0 for no smoothing
     
-    if wDest is None:
-        wDest = np.zeros_like(wY)
+    # Delete existing iteration_ii.png debugging files
+    existing_files = glob.glob("debugplots/iteration_*.png")
+    for file_path in existing_files:
+        os.remove(file_path)
     
     ForceIterations = 1 if NIter != 0 else 0
     NIter = 100 if NIter == 0 else NIter
@@ -210,11 +213,7 @@ def Deconvolve_DblExp(wX, wY, wDest, Tau1, A1, Tau2, A2, NIter, SmoothError):
 
     # Update wX_free to contain only the first N seconds
     wX_free = wX[:N] - wX[0]
-    kernel = np.zeros_like(wX_free)
-    wError = wY.copy()
-    wConv = np.zeros_like(wY)
-    wLastConv = np.zeros_like(wY)
-    wDest = wY
+    
 
     # Calculate the desired number of points per one-second interval
     points_per_interval = 10
@@ -226,40 +225,41 @@ def Deconvolve_DblExp(wX, wY, wDest, Tau1, A1, Tau2, A2, NIter, SmoothError):
     # Determine the number of intervals based on the sequence length and interval length
     num_intervals = int(np.ceil(sequence_length / interval_length))
 
-    # Pad the sequences to match the required number of intervals
-    padded_length = int(num_intervals * interval_length)
-    wDest_padded = np.pad(wDest, (0, padded_length - sequence_length))
-    kernel_padded = np.pad(kernel, (0, padded_length - len(kernel)))
+    # Determine the desired length of the sequences after upsampling
+    upsampled_length = int(num_intervals * interval_length)
 
-    # Perform the convolution on the padded sequences
-    full_conv = np.convolve(wDest_padded, kernel_padded, mode='full')
+    # Create an array of indices for the original and upsampled data
+    old_indices = np.arange(len(wX))
+    new_indices = np.linspace(0, len(wX) - 1, upsampled_length)
+    old_indices_kernel = np.arange(len(wX_free))
+    new_indices_kernel = np.linspace(0, len(wX_free) - 1, upsampled_length)
 
-    # Get the convolution results at the desired evenly spaced points
-    conv_points = full_conv[::int(interval_length)]
+    # Upsample
+    wY_upsampled = np.interp(new_indices, old_indices, wY)
+    wX_free_upsampled = np.interp(new_indices_kernel, old_indices_kernel, wX_free)
 
-    # Note: conv_points will contain the convolution results at 10 evenly spaced points on each one-second interval
+    kernel = np.zeros_like(wX_free_upsampled)
+    wError = np.zeros_like(wY_upsampled)
+    wConv = np.zeros_like(wY_upsampled)
+    wLastConv = np.zeros_like(wY_upsampled)
+    wDest = wY_upsampled
 
     LastR2 = 0.01
     R2 = 0.01
-
-    # Delete existing iteration_ii.png debugging files
-    existing_files = glob.glob("debugplots/iteration_*.png")
-    for file_path in existing_files:
-        os.remove(file_path)
     
     for ii in range(NIter):
         wLastConv[:] = wConv[:]
         
         # Perform convolution using numpy.convolve
-        kernel = (A1 / Tau1) * np.exp(-wX_free / Tau1) + (A2 / Tau2) * np.exp(-wX_free / Tau2)
-        full_conv = np.convolve(wDest, kernel, mode='full') #this line will get replaced by a function call to HV_Convolve
+        kernel = (A1 / Tau1) * np.exp(-wX_free_upsampled / Tau1) + (A2 / Tau2) * np.exp(-wX_free_upsampled / Tau2)
+        full_conv = np.convolve(wDest, kernel, mode='full') 
 
         # Correct the shift by selecting the appropriate portion of the convolution
-        wConv = full_conv[:len(wY)]
+        wConv = full_conv[:len(wY_upsampled)]
         
-        wError[:] = wConv - wY
+        wError[:] = wConv - wY_upsampled
         LastR2 = R2
-        R2 = np.corrcoef(wConv, wY)[0, 1] ** 2
+        R2 = np.corrcoef(wConv, wY_upsampled)[0, 1] ** 2
         
         if ((abs(R2 - LastR2) / LastR2) * 100 > 1) or (ForceIterations == 1):
             wDest = AdjGuess(wDest, wError, SmoothError)
@@ -280,7 +280,9 @@ def Deconvolve_DblExp(wX, wY, wDest, Tau1, A1, Tau2, A2, NIter, SmoothError):
         plt.savefig(f'debugplots/iteration_{ii}.png')  # save the figure to file
         plt.close()  # close the figure to free up memory
     
-    return wDest
+    #downsample 
+    wDest_downsampled = resample(wDest, len(wX))
+    return wDest_downsampled
 
 
 if __name__ == "__main__":
