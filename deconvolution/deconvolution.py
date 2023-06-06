@@ -7,7 +7,10 @@ import pandas as pd
 from datetime import datetime, timedelta
 import glob
 import os
+import time
+from scipy.integrate import trapz
 
+start_time = time.time()
 
 def AdjGuess(wG, wE, NSmooth):
     if NSmooth == 0 or NSmooth == 1:
@@ -23,7 +26,6 @@ def AdjGuess(wG, wE, NSmooth):
     
     wG = np.where(wG < 0, 0, wG)
     return wG
-
 
 def DP_DblExp_NormalizedIRF(x, A1, tau1, tau2):
     return A1 * np.exp(-x / tau1) + (1 - A1) * np.exp(-x / tau2)
@@ -287,9 +289,8 @@ def Deconvolve_DblExp(wX, wY, wDest, Tau1, A1, Tau2, A2, NIter, SmoothError):
 
 if __name__ == "__main__":
     # Load the data from the CSV file
-
-    # directory = 'C:/Users/hjver/Documents/dp_research_public/deconvolution/data/'
-    directory = 'C:/Users/demetriospagonis/Box/github/dp_research_public/deconvolution/data/'
+    directory = 'C:/Users/hjver/Documents/dp_research_public/deconvolution/data/'
+    # directory = 'C:/Users/demetriospagonis/Box/github/dp_research_public/deconvolution/data/'
     datafile = '2023_06_05_testdata.csv'
 
     data = pd.read_csv(directory+datafile)
@@ -327,6 +328,16 @@ if __name__ == "__main__":
     plt.legend()
 
     plt.tight_layout()
+
+    # Calculate the integral of wY
+    integral_wY = trapz(wY)
+
+    # Calculate the integral of wDest
+    integral_wDest = trapz(wDest)
+
+    # Print the integrals
+    print("Integral of wY:", integral_wY)
+    print("Integral of wDest:", integral_wDest)
     
     # Save the figure as a PNG file
     base_str = datafile.rstrip('.csv')
@@ -337,3 +348,18 @@ if __name__ == "__main__":
     output_data = pd.DataFrame({'time': wX, 'original_signal': wY, 'deconvolved_signal': wDest})
     output_file = directory + f'{base_str}_Deconvolution.csv'
     output_data.to_csv(output_file, index=False)
+
+    # Place this line at the end of your code
+    end_time = time.time()
+    
+    # Calculate the total runtime
+    total_runtime = end_time - start_time
+
+    # Print the total runtime in seconds
+    print("Total runtime:", total_runtime, "seconds")
+
+    # Beep sound notification
+    os.system("echo '\a'")
+
+
+
