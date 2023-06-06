@@ -9,8 +9,6 @@ import os
 import time
 from scipy.integrate import trapz
 
-start_time = time.time()
-
 def AdjGuess(wG, wE, NSmooth):
     if NSmooth == 0 or NSmooth == 1:
         wG = wG.astype(float)  # Convert wG to float data type
@@ -262,28 +260,29 @@ def ConvolveXYDbleExp(wX, wY, Tau1, A1, Tau2, A2):
     
     wDeltaX = np.diff(wX)
     deltatau = np.min(wDeltaX) / 50
-    deltatau = 0.05 if deltatau < 0.01 else deltatau
+    deltatau = 0.1 if deltatau < 0.1 else deltatau
     
     NPTS = len(wY)
     wConvolvedData = np.empty(NPTS)
-    
+
     for iPt in range(NPTS):
         xi = wX[iPt] + ((wX[iPt] - wX[iPt-1]) / 2) if iPt == NPTS-1 else (wX[iPt] + wX[iPt+1]) / 2
         IntegralSum = 0
-        
+
         for tau in np.arange(0, 5 * max(Tau1, Tau2), deltatau):
             if tau <= xi:
-                PtTerm1 = np.searchsorted(wX, xi - tau)
+                PtTerm1 = np.searchsorted(wX, xi - tau, side='right') - 1
                 Term1 = wY[PtTerm1] if 0 <= PtTerm1 < len(wY) else 0
                 Term2 = (A1 / Tau1) * np.exp(-tau / Tau1) + (A2 / Tau2) * np.exp(-tau / Tau2)
                 IntegralSum += Term1 * Term2 * deltatau
-        
+
         wConvolvedData[iPt] = IntegralSum
-    
+
     return wConvolvedData
 
 
 if __name__ == "__main__":
+    start_time = time.time()
     # Load the data from the CSV file
     directory = 'C:/Users/hjver/Documents/dp_research_public/deconvolution/data/'
     # directory = 'C:/Users/demetriospagonis/Box/github/dp_research_public/deconvolution/data/'
@@ -299,7 +298,7 @@ if __name__ == "__main__":
     Tau2 = 75  # Replace with the desired value
     A2 = 1.0-A1  # Replace with the desired value
     NIter = 0  # Replace with the desired value
-    SmoothError = 5  # Replace with the desired value
+    SmoothError = 0  # Replace with the desired value
     
     # Deconvolution
     wDest = np.zeros_like(wY)
@@ -334,6 +333,15 @@ if __name__ == "__main__":
     # Print the integrals
     print("Integral of wY:", integral_wY)
     print("Integral of wDest:", integral_wDest)
+
+    # Place this line at the end of your code
+    end_time = time.time()
+
+    # Calculate the total runtime
+    total_runtime = end_time - start_time
+
+    # Print the total runtime in seconds
+    print("Total runtime:", total_runtime, "seconds")
     
     # Save the figure as a PNG file
     base_str = datafile.rstrip('.csv')
@@ -345,17 +353,7 @@ if __name__ == "__main__":
     output_file = directory + f'{base_str}_Deconvolution.csv'
     output_data.to_csv(output_file, index=False)
 
-    # Place this line at the end of your code
-    end_time = time.time()
-    
-    # Calculate the total runtime
-    total_runtime = end_time - start_time
 
-    # Print the total runtime in seconds
-    print("Total runtime:", total_runtime, "seconds")
-
-    # Beep sound notification
-    os.system("echo '\a'")
 
 
 
