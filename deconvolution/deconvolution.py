@@ -214,7 +214,30 @@ def Deconvolve_DblExp(wX, wY, wDest, Tau1, A1, Tau2, A2, NIter, SmoothError):
     wError = wY.copy()
     wConv = np.zeros_like(wY)
     wLastConv = np.zeros_like(wY)
-    wDest = wY 
+    wDest = wY
+
+    # Calculate the desired number of points per one-second interval
+    points_per_interval = 10
+
+    # Determine the length of the sequences and the desired interval length
+    sequence_length = len(wDest)
+    interval_length = sequence_length / points_per_interval
+
+    # Determine the number of intervals based on the sequence length and interval length
+    num_intervals = int(np.ceil(sequence_length / interval_length))
+
+    # Pad the sequences to match the required number of intervals
+    padded_length = int(num_intervals * interval_length)
+    wDest_padded = np.pad(wDest, (0, padded_length - sequence_length))
+    kernel_padded = np.pad(kernel, (0, padded_length - len(kernel)))
+
+    # Perform the convolution on the padded sequences
+    full_conv = np.convolve(wDest_padded, kernel_padded, mode='full')
+
+    # Get the convolution results at the desired evenly spaced points
+    conv_points = full_conv[::int(interval_length)]
+
+    # Note: conv_points will contain the convolution results at 10 evenly spaced points on each one-second interval
 
     LastR2 = 0.01
     R2 = 0.01
@@ -229,7 +252,7 @@ def Deconvolve_DblExp(wX, wY, wDest, Tau1, A1, Tau2, A2, NIter, SmoothError):
         
         # Perform convolution using numpy.convolve
         kernel = (A1 / Tau1) * np.exp(-wX_free / Tau1) + (A2 / Tau2) * np.exp(-wX_free / Tau2)
-        full_conv = np.convolve(wDest, kernel, mode='full')
+        full_conv = np.convolve(wDest, kernel, mode='full') #this line will get replaced by a function call to HV_Convolve
 
         # Correct the shift by selecting the appropriate portion of the convolution
         wConv = full_conv[:len(wY)]
