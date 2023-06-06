@@ -4,6 +4,8 @@ import matplotlib.dates as mdates
 from scipy.optimize import curve_fit
 import pandas as pd
 from datetime import datetime, timedelta
+import glob
+import os
 
 
 def AdjGuess(wG, wE, NSmooth):
@@ -216,6 +218,11 @@ def Deconvolve_DblExp(wX, wY, wDest, Tau1, A1, Tau2, A2, NIter, SmoothError):
 
     LastR2 = 0.01
     R2 = 0.01
+
+    # Delete existing iteration_ii.png debugging files
+    existing_files = glob.glob("debugplots/iteration_*.png")
+    for file_path in existing_files:
+        os.remove(file_path)
     
     for ii in range(NIter):
         wLastConv[:] = wConv[:]
@@ -238,21 +245,14 @@ def Deconvolve_DblExp(wX, wY, wDest, Tau1, A1, Tau2, A2, NIter, SmoothError):
             break
 
         # Plotting wY, wError, wDest, and wConv
-        fig, axs = plt.subplots(2, 2)
-        axs[0, 0].plot(wY, color='blue')
-        axs[0, 0].set_title('wY')
+        fig, axs = plt.subplots()
+        axs.plot(wY, color='blue', label='Data')
+        axs.plot(wError, color='red', label='Error')
+        axs.plot(wDest, color='green', label='Deconvolved')
+        axs.plot(wConv, color='purple', label='Reconstructed Data')
 
-        axs[0, 1].plot(wError, color='red')
-        axs[0, 1].set_title('wError')
 
-        axs[1, 0].plot(wDest, color='green')
-        axs[1, 0].set_title('wDest')
-
-        axs[1, 1].plot(wConv, color='purple')
-        axs[1, 1].set_title('wConv')
-
-        for ax in axs.flat:
-            ax.label_outer()
+        axs.legend()
 
         plt.savefig(f'debugplots/iteration_{ii}.png')  # save the figure to file
         plt.close()  # close the figure to free up memory
@@ -262,11 +262,12 @@ def Deconvolve_DblExp(wX, wY, wDest, Tau1, A1, Tau2, A2, NIter, SmoothError):
 
 if __name__ == "__main__":
     # Load the data from the CSV file
-    # data = pd.read_csv('C:/Users/hjver/Documents/dp_research_public/deconvolution/data/2019_08_07_HNO3Data.csv')
-    # wX = data['time'].values
-    # wY = data['HNO3_190_Hz'].values
 
-    data = pd.read_csv('C:/Users/hjver/Documents/dp_research_public/deconvolution/data/2023_06_05_testdata.csv')
+    # directory = 'C:/Users/hjver/Documents/dp_research_public/deconvolution/data/'
+    directory = 'C:/Users/demetriospagonis/Box/github/dp_research_public/deconvolution/data/'
+    datafile = '2023_06_05_testdata.csv'
+
+    data = pd.read_csv(directory+datafile)
     wX = data['time'].values
     wY = data['signal'].values
 
@@ -275,7 +276,7 @@ if __name__ == "__main__":
     A1 = 0.7  # Replace with the desired value
     Tau2 = 75  # Replace with the desired value
     A2 = 1.0-A1  # Replace with the desired value
-    NIter = 10  # Replace with the desired value
+    NIter = 0  # Replace with the desired value
     SmoothError = 5  # Replace with the desired value
     
     # Deconvolution
@@ -301,5 +302,13 @@ if __name__ == "__main__":
     plt.legend()
 
     plt.tight_layout()
+    
+    # Save the figure as a PNG file
+    base_str = datafile.rstrip('.csv')
+    plt.savefig(directory + f'{base_str}_Deconvolution.png')
     plt.show()
 
+    # Save wX, wY, and wDest to a CSV file
+    output_data = pd.DataFrame({'time': wX, 'original_signal': wY, 'deconvolved_signal': wDest})
+    output_file = directory + f'{base_str}_Deconvolution.csv'
+    output_data.to_csv(output_file, index=False)
