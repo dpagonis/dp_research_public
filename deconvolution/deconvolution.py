@@ -10,7 +10,6 @@ import os
 import time
 from scipy.integrate import trapz
 
-start_time = time.time()
 
 def AdjGuess(wG, wE, NSmooth):
     if NSmooth == 0 or NSmooth == 1:
@@ -211,52 +210,45 @@ def Deconvolve_DblExp(wX, wY, wDest, Tau1, A1, Tau2, A2, NIter, SmoothError):
     ForceIterations = 1 if NIter != 0 else 0
     NIter = 100 if NIter == 0 else NIter
     
-    N = int(5 * max(Tau1, Tau2)) # Calculate the desired duration
+    N = int(10 * max(Tau1, Tau2)) # Calculate the desired duration
 
-    # Update wX_free to contain only the first N seconds
-    wX_free = wX[:N] - wX[0]
+    # make X data for kernel
+    wX_kernel = wX[:N] - wX[0]
     
-
     # Calculate the desired number of points per one-second interval
     points_per_interval = 10
 
-    # Determine the length of the sequences and the desired interval length
-    sequence_length = len(wDest)
-    interval_length = sequence_length / points_per_interval
-
-    # Determine the number of intervals based on the sequence length and interval length
-    num_intervals = int(np.ceil(sequence_length / interval_length))
-
-    # Determine the desired length of the sequences after upsampling
-    upsampled_length = int(num_intervals * interval_length)
-
     # Create an array of indices for the original and upsampled data
     old_indices = np.arange(len(wX))
-    new_indices = np.linspace(0, len(wX) - 1, upsampled_length)
-    old_indices_kernel = np.arange(len(wX_free))
-    new_indices_kernel = np.linspace(0, len(wX_free) - 1, upsampled_length)
+    new_indices = np.linspace(0, len(wX) - 1, len(wY) * points_per_interval)
+    old_indices_kernel = np.arange(len(wX_kernel))
+    new_indices_kernel = np.linspace(0, len(wX_kernel) - 1, len(wX_kernel) * points_per_interval)
 
     # Upsample
     wY_upsampled = np.interp(new_indices, old_indices, wY)
-    wX_free_upsampled = np.interp(new_indices_kernel, old_indices_kernel, wX_free)
+    wX_kernel_upsampled = np.interp(new_indices_kernel, old_indices_kernel, wX_kernel)
+    
+    # Calculate delta_x, the spacing between the points in wX_kernel_upsampled
+    delta_x = wX_kernel_upsampled[1] - wX_kernel_upsampled[0]
 
-    kernel = np.zeros_like(wX_free_upsampled)
+    kernel = np.zeros_like(wX_kernel_upsampled)
     wError = np.zeros_like(wY_upsampled)
     wConv = np.zeros_like(wY_upsampled)
     wLastConv = np.zeros_like(wY_upsampled)
-    wDest = wY_upsampled
+    wDest_upsampled = wY_upsampled
 
     LastR2 = 0.01
     R2 = 0.01
-    
+
+
     for ii in range(NIter):
         wLastConv[:] = wConv[:]
         
-        # Perform convolution using numpy.convolve
-        kernel = (A1 / Tau1) * np.exp(-wX_free_upsampled / Tau1) + (A2 / Tau2) * np.exp(-wX_free_upsampled / Tau2)
-        full_conv = np.convolve(wDest, kernel, mode='full') 
+        # define the kernel (instrument response function) and do the convolution
+        kernel = (A1 / Tau1) * np.exp(-wX_kernel_upsampled / Tau1) + (A2 / Tau2) * np.exp(-wX_kernel_upsampled / Tau2)
+        full_conv = np.convolve(wDest_upsampled, kernel, mode='full') * delta_x
 
-        # Correct the shift by selecting the appropriate portion of the convolution
+        # Correct the shift for 'full' output by selecting the appropriate portion of the convolution
         wConv = full_conv[:len(wY_upsampled)]
         
         wError[:] = wConv - wY_upsampled
@@ -264,50 +256,51 @@ def Deconvolve_DblExp(wX, wY, wDest, Tau1, A1, Tau2, A2, NIter, SmoothError):
         R2 = np.corrcoef(wConv, wY_upsampled)[0, 1] ** 2
         
         if ((abs(R2 - LastR2) / LastR2) * 100 > 1) or (ForceIterations == 1):
-            wDest = AdjGuess(wDest, wError, SmoothError)
+            wDest_upsampled = AdjGuess(wDest_upsampled, wError, SmoothError)
         else:
-            print(f"Stopped deconv at N={ii}, %R2 change={(abs(R2 - LastR2) / LastR2) * 100}")
+            print(f"Stopped deconv at N={ii}, %R2 change={(abs(R2 - LastR2) / LastR2) * 100:.3f}")
             break
 
-        # Plotting wY, wError, wDest, and wConv
+        # Make and save figure showing progress for debugging
         fig, axs = plt.subplots()
-        axs.plot(wY, color='blue', label='Data')
+        axs.plot(wY_upsampled, color='blue', label='Data')
         axs.plot(wError, color='red', label='Error')
-        axs.plot(wDest, color='green', label='Deconvolved')
+        axs.plot(wDest_upsampled, color='green', label='Deconvolved')
         axs.plot(wConv, color='purple', label='Reconstructed Data')
-
-
         axs.legend()
-
         plt.savefig(f'debugplots/iteration_{ii}.png')  # save the figure to file
         plt.close()  # close the figure to free up memory
     
     #downsample 
-    wDest_downsampled = resample(wDest, len(wX))
-    return wDest_downsampled
+    wDest = resample(wDest_upsampled, len(wX))
+    return wDest
 
 
 if __name__ == "__main__":
+    start_time = time.time()
+    
     # Load the data from the CSV file
-    directory = 'C:/Users/hjver/Documents/dp_research_public/deconvolution/data/'
-    # directory = 'C:/Users/demetriospagonis/Box/github/dp_research_public/deconvolution/data/'
-    datafile = '2023_06_05_testdata.csv'
+    # directory = 'C:/Users/hjver/Documents/dp_research_public/deconvolution/data/'
+    directory = 'C:/Users/demetriospagonis/Box/github/dp_research_public/deconvolution/data/'
+    datafile = '2019_08_07_HNO3Data.csv'
 
     data = pd.read_csv(directory+datafile)
     wX = data['time'].values
-    wY = data['signal'].values
+    wY = data['HNO3_191_Hz'].values
 
     # Set the parameters for deconvolution
-    Tau1 = 5.0  # Replace with the desired value
-    A1 = 0.7  # Replace with the desired value
-    Tau2 = 75  # Replace with the desired value
+    Tau1 = 4.9327  # Replace with the desired value
+    A1 = 0.7072  # Replace with the desired value
+    Tau2 = 55.2182  # Replace with the desired value
     A2 = 1.0-A1  # Replace with the desired value
     NIter = 0  # Replace with the desired value
-    SmoothError = 5  # Replace with the desired value
+    SmoothError = 0  # Replace with the desired value
     
     # Deconvolution
     wDest = np.zeros_like(wY)
     wDest = Deconvolve_DblExp(wX, wY, wDest, Tau1, A1, Tau2, A2, NIter, SmoothError)
+
+    end_time = time.time()
 
     # Plot the figures
     plt.figure(figsize=(10, 6))
@@ -322,22 +315,25 @@ if __name__ == "__main__":
 
     # Deconvolution only
     plt.subplot(2, 1, 2)
-    plt.plot(wX, wDest, label='Deconvolution')
+    plt.plot(wX, wDest, label='Deconvolution',color='C1')
     plt.xlabel('Time')
     plt.ylabel('Signal')
     plt.legend()
-
     plt.tight_layout()
 
-    # Calculate the integral of wY
-    integral_wY = trapz(wY)
+    # Calculate the integrals
+    integral_wY = trapz(wY,wX)
+    integral_wDest = trapz(wDest,wX)
+    
+    # # Print the integrals
+    # print("Integral of wY: {:.1f}".format(integral_wY))
+    # print("Integral of wDest: {:.1f}".format(integral_wDest))
 
-    # Calculate the integral of wDest
-    integral_wDest = trapz(wDest)
+    print("Area ratio: {:.4f}".format(1+(integral_wDest-integral_wY)/integral_wY))
+    # Calculate the total runtime
+    total_runtime = end_time - start_time
+    print("Total runtime: {:.1f} seconds".format(total_runtime))
 
-    # Print the integrals
-    print("Integral of wY:", integral_wY)
-    print("Integral of wDest:", integral_wDest)
     
     # Save the figure as a PNG file
     base_str = datafile.rstrip('.csv')
@@ -348,18 +344,3 @@ if __name__ == "__main__":
     output_data = pd.DataFrame({'time': wX, 'original_signal': wY, 'deconvolved_signal': wDest})
     output_file = directory + f'{base_str}_Deconvolution.csv'
     output_data.to_csv(output_file, index=False)
-
-    # Place this line at the end of your code
-    end_time = time.time()
-    
-    # Calculate the total runtime
-    total_runtime = end_time - start_time
-
-    # Print the total runtime in seconds
-    print("Total runtime:", total_runtime, "seconds")
-
-    # Beep sound notification
-    os.system("echo '\a'")
-
-
-
