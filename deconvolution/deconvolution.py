@@ -277,33 +277,17 @@ def Deconvolve_DblExp(wX, wY, wDest, Tau1, A1, Tau2, A2, NIter, SmoothError):
     wDest = resample(wDest_upsampled, len(wX))
     return wDest
 
-def HV_kernel(time, A1, Tau1, A2, Tau2):
-    """Computes the kernel function based on given parameters."""
-    resolution = 0.1  # Fixed resolution of 0.1 units
-    max_tau = max(Tau1, Tau2)
-    duration = 10 * max_tau
-    num_points = int(duration / resolution)
-
-    wX_kernel_upsampled = np.linspace(0, duration, num_points)
-    kernel = (A1 / Tau1) * np.exp(-wX_kernel_upsampled / Tau1) + (A2 / Tau2) * np.exp(-wX_kernel_upsampled / Tau2)
-    
-    # Set values outside the kernel range to the values of the first and last data points
-    kernel[:num_points] = kernel[0]
-    kernel[num_points:] = kernel[-1]
-    
-    return kernel
-
-def HV_Convolve(WDest, wX, FitResults):
+def HV_Convolve( wX, wY, IRF_Data):
     """Perform convolution at each point and store results in WConv."""
 
-    # Read the fit parameters from the CSV file
-    FitResults = pd.read_csv('C:/Users/hjver/Documents/dp_research_public/deconvolution/data/2019_08_07_InstrumentResponseFunction.csv')
+    #prep destination array
+    wConv = np.zeros_like(wY)
 
     # Create interpolation functions for the parameters
-    A1_func = interpolate.interp1d(FitResults['time'], FitResults['A1'])
-    Tau1_func = interpolate.interp1d(FitResults['time'], FitResults['Tau1'])
-    A2_func = interpolate.interp1d(FitResults['time'], FitResults['A2'])
-    Tau2_func = interpolate.interp1d(FitResults['time'], FitResults['Tau2'])
+    A1_func = interpolate.interp1d(IRF_Data['time'], IRF_Data['A1'])
+    Tau1_func = interpolate.interp1d(IRF_Data['time'], IRF_Data['Tau1'])
+    A2_func = interpolate.interp1d(IRF_Data['time'], IRF_Data['A2'])
+    Tau2_func = interpolate.interp1d(IRF_Data['time'], IRF_Data['Tau2'])
 
     # Interpolate the parameters for the times in wX
     A1 = A1_func(wX)
@@ -311,24 +295,33 @@ def HV_Convolve(WDest, wX, FitResults):
     A2 = A2_func(wX)
     Tau2 = Tau2_func(wX)
 
-    # Ensure that WDest is a NumPy array
-    WDest = np.array(WDest)
-
     # Loop through each point in wX
     for i in range(len(wX)):
+        
+        # get A and tau values at time i
+        A1_i = *****
+        A2_i = *****
+        Tau1_i = *****
+        Tau2_i =*****
 
-        # Compute the kernel for the specific point
-        kernel = HV_kernel(wX[i], A1[i], Tau1[i], A2[i], Tau2[i])
+        # Make wX_kernel that goes from zero to 10*tau at the same time **spacing** as wX, starting at 0
+        # note that wX is igor timestamps of ~3e9
+        # we probably need to 'flip the order' of wKernel to go from smallest values to largest
+        wX_kernel =*****
+        wKernel = (A1_i / Tau1_i) * np.exp(-wX_kernel / Tau1_i) + (A2_i / Tau2_i) * np.exp(-wX_kernel / Tau2_i)
+        wKernel = flip it
 
+        # grab the subset of data from wY that ends at point i
+        #this subset has the same length as wKernel and wX_kernel
+        #apply boundary condition that for points before time zero we just use the first value of wY
+        wY_i = *****
+        
         # Perform the dot product between the kernel and data points
-        wConv = np.dot(wY, kernel)
+        wConv[i] = np.dot(wY_i, wKernel)
 
-        # Store the result in WDest
-        WDest[i] = wConv
+    return wConv
 
-    return WDest
-
-def HV_Deconvolve(wX, wY, wDest):
+def HV_Deconvolve(wX, wY, wDest, IRF_data, SmoothError):
     
     # Delete existing iteration_ii.png debugging files
     existing_files = glob.glob("debugplots/iteration_*.png")
@@ -337,29 +330,18 @@ def HV_Deconvolve(wX, wY, wDest):
     
     ForceIterations = 1 if NIter != 0 else 0
     NIter = 100 if NIter == 0 else NIter
-    
-    N = int(10 * max(Tau1, Tau2)) # Calculate the desired duration
 
-    # make X data for kernel
-    wX_kernel = wX[:N] - wX[0]
-    
     # Calculate the desired number of points per one-second interval
     points_per_interval = 10
 
     # Create an array of indices for the original and upsampled data
     old_indices = np.arange(len(wX))
     new_indices = np.linspace(0, len(wX) - 1, len(wY) * points_per_interval)
-    old_indices_kernel = np.arange(len(wX_kernel))
-    new_indices_kernel = np.linspace(0, len(wX_kernel) - 1, len(wX_kernel) * points_per_interval)
 
     # Upsample
     wY_upsampled = np.interp(new_indices, old_indices, wY)
-    wX_kernel_upsampled = np.interp(new_indices_kernel, old_indices_kernel, wX_kernel)
-    
-    # Calculate delta_x, the spacing between the points in wX_kernel_upsampled
-    delta_x = wX_kernel_upsampled[1] - wX_kernel_upsampled[0]
+    wX_upsampled = np.interp(new_indices, old_indices, wX)
 
-    kernel = np.zeros_like(wX_kernel_upsampled)
     wError = np.zeros_like(wY_upsampled)
     wConv = np.zeros_like(wY_upsampled)
     wLastConv = np.zeros_like(wY_upsampled)
@@ -368,16 +350,12 @@ def HV_Deconvolve(wX, wY, wDest):
     LastR2 = 0.01
     R2 = 0.01
 
-
     for ii in range(NIter):
         wLastConv[:] = wConv[:]
         
         # Do the convolution
-        full_conv = HV_Convolve(wDest, wX, kernel)
+        wConv = HV_Convolve(wX_upsampled, wY_upsampled, IRF_data)
 
-        # Correct the shift for 'full' output by selecting the appropriate portion of the convolution
-        wConv = full_conv[:len(wY_upsampled)]
-        
         wError[:] = wConv - wY_upsampled
         LastR2 = R2
         R2 = np.corrcoef(wConv, wY_upsampled)[0, 1] ** 2
@@ -402,17 +380,23 @@ def HV_Deconvolve(wX, wY, wDest):
     wDest = resample(wDest_upsampled, len(wX))
     return wDest
 
-if __name__ == "__main__":
+def main():
     start_time = time.time()
     
     # Load the data from the CSV file
     directory = 'C:/Users/hjver/Documents/dp_research_public/deconvolution/data/'
     # directory = 'C:/Users/demetriospagonis/Box/github/dp_research_public/deconvolution/data/'
-    datafile = '2019_08_07_InstrumentResponseFunction.csv'
+    datafile = '2019_08_07_HNO3Data.csv'
+
+    base_str = datafile.rstrip('.csv')
+    date_str = datafile[:10]
+    IRF_filename = f'{date_str}_InstrumentResponseFunction.csv'
 
     data = pd.read_csv(directory+datafile)
     wX = data['time'].values
     wY = data['original_signal'].values
+
+    IRF_data = pd.read_csv(IRF_filename)
 
     # Set the parameters for deconvolution
     # Tau1 = 4.9327  # Replace with the desired value
@@ -424,7 +408,7 @@ if __name__ == "__main__":
     
     # Deconvolution
     wDest = np.zeros_like(wY)
-    wDest = HV_Deconvolve(wX, wY, wDest)
+    wDest = HV_Deconvolve(wX, wY, wDest, IRF_data, SmoothError)
 
     end_time = time.time()
 
@@ -462,7 +446,6 @@ if __name__ == "__main__":
 
     
     # Save the figure as a PNG file
-    base_str = datafile.rstrip('.csv')
     plt.savefig(directory + f'{base_str}_Deconvolution.png')
     plt.show()
 
@@ -470,3 +453,7 @@ if __name__ == "__main__":
     output_data = pd.DataFrame({'time': wX, 'original_signal': wY, 'deconvolved_signal': wDest})
     output_file = directory + f'{base_str}_Deconvolution.csv'
     output_data.to_csv(output_file, index=False)
+
+
+if __name__ == "__main__":
+    main()
