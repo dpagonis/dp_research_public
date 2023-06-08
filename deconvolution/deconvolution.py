@@ -277,51 +277,7 @@ def Deconvolve_DblExp(wX, wY, wDest, Tau1, A1, Tau2, A2, NIter, SmoothError):
     wDest = resample(wDest_upsampled, len(wX))
     return wDest
 
-def HV_Convolve( wX, wY, IRF_Data):
-    """Perform convolution at each point and store results in WConv."""
-
-    #prep destination array
-    wConv = np.zeros_like(wY)
-
-    # Create interpolation functions for the parameters
-    A1_func = interpolate.interp1d(IRF_Data['time'], IRF_Data['A1'])
-    Tau1_func = interpolate.interp1d(IRF_Data['time'], IRF_Data['Tau1'])
-    A2_func = interpolate.interp1d(IRF_Data['time'], IRF_Data['A2'])
-    Tau2_func = interpolate.interp1d(IRF_Data['time'], IRF_Data['Tau2'])
-
-    # Interpolate the parameters for the times in wX
-    A1 = A1_func(wX)
-    Tau1 = Tau1_func(wX)
-    A2 = A2_func(wX)
-    Tau2 = Tau2_func(wX)
-
-    # Loop through each point in wX
-    for i in range(len(wX)):
-        
-        # get A and tau values at time i
-        A1_i = *****
-        A2_i = *****
-        Tau1_i = *****
-        Tau2_i =*****
-
-        # Make wX_kernel that goes from zero to 10*tau at the same time **spacing** as wX, starting at 0
-        # note that wX is igor timestamps of ~3e9
-        # we probably need to 'flip the order' of wKernel to go from smallest values to largest
-        wX_kernel =*****
-        wKernel = (A1_i / Tau1_i) * np.exp(-wX_kernel / Tau1_i) + (A2_i / Tau2_i) * np.exp(-wX_kernel / Tau2_i)
-        wKernel = flip it
-
-        # grab the subset of data from wY that ends at point i
-        #this subset has the same length as wKernel and wX_kernel
-        #apply boundary condition that for points before time zero we just use the first value of wY
-        wY_i = *****
-        
-        # Perform the dot product between the kernel and data points
-        wConv[i] = np.dot(wY_i, wKernel)
-
-    return wConv
-
-def HV_Deconvolve(wX, wY, wDest, IRF_data, SmoothError):
+def HV_Deconvolve(wX, wY, wDest, IRF_data, SmoothError, NIter):
     
     # Delete existing iteration_ii.png debugging files
     existing_files = glob.glob("debugplots/iteration_*.png")
@@ -380,6 +336,55 @@ def HV_Deconvolve(wX, wY, wDest, IRF_data, SmoothError):
     wDest = resample(wDest_upsampled, len(wX))
     return wDest
 
+def HV_Convolve(wX, wY, IRF_Data):
+    """Perform convolution at each point and store results in WConv."""
+    
+    # Create interpolation functions for the parameters
+    A1_func = interpolate.interp1d(IRF_Data['time'], IRF_Data['A1'], fill_value=(IRF_Data['A1'].values[0], IRF_Data['A1'].values[-1]), bounds_error=False)
+    Tau1_func = interpolate.interp1d(IRF_Data['time'], IRF_Data['Tau1'], fill_value=(IRF_Data['Tau1'].values[0], IRF_Data['Tau1'].values[-1]), bounds_error=False)
+    A2_func = interpolate.interp1d(IRF_Data['time'], IRF_Data['A2'], fill_value=(IRF_Data['A2'].values[0], IRF_Data['A2'].values[-1]), bounds_error=False)
+    Tau2_func = interpolate.interp1d(IRF_Data['time'], IRF_Data['Tau2'], fill_value=(IRF_Data['Tau2'].values[0], IRF_Data['Tau2'].values[-1]), bounds_error=False)
+
+    # Interpolate the parameters for the times in wX
+    A1 = A1_func(wX)
+    Tau1 = Tau1_func(wX)
+    A2 = A2_func(wX)
+    Tau2 = Tau2_func(wX)
+
+    # Prepare destination array
+    wConv = np.zeros_like(wY)
+
+    # Loop through each point in wX
+    for i in range(len(wX)):
+        print(i)
+        # Get A and tau values at time i
+        A1_i = A1[i]
+        A2_i = A2[i]
+        Tau1_i = Tau1[i]
+        Tau2_i = Tau2[i]
+
+        # Make wX_kernel that goes from zero to 10*tau at the same time spacing as wX, starting at 0
+        wX_kernel = np.linspace(0, 10 * max(Tau1_i, Tau2_i), len(wX))
+        wKernel = (A1_i / Tau1_i) * np.exp(-wX_kernel / Tau1_i) + (A2_i / Tau2_i) * np.exp(-wX_kernel / Tau2_i)
+        wKernel = np.flip(wKernel)  # Flip the order of wKernel
+        
+        # Grab the subset of data from wY that ends at point i
+        # This subset has the same length as wKernel and wX_kernel
+        # Apply boundary condition that for points before time zero, we just use the first value of wY
+        wY_i = wY[:i+1]
+        
+        # Perform the dot product using Kahan summation
+        dot = 0.0
+        c = 0.0
+        for j in range(len(wY_i)):
+            prod = wY_i[j] * wKernel[j] - c
+            temp = dot + prod
+            c = (temp - dot) - prod
+            dot = temp
+        wConv[i] = dot
+
+    return wConv
+
 def main():
     start_time = time.time()
     
@@ -394,21 +399,21 @@ def main():
 
     data = pd.read_csv(directory+datafile)
     wX = data['time'].values
-    wY = data['original_signal'].values
+    wY = data['HNO3_190_Hz'].values
 
-    IRF_data = pd.read_csv(IRF_filename)
+    IRF_data = pd.read_csv(directory+IRF_filename)
 
     # Set the parameters for deconvolution
     # Tau1 = 4.9327  # Replace with the desired value
     # A1 = 0.7072  # Replace with the desired value
     # Tau2 = 55.2182  # Replace with the desired value
     # A2 = 1.0-A1  # Replace with the desired value
-    # NIter = 0  # Replace with the desired value
+    NIter = 0  # Replace with the desired value
     SmoothError = 0  # Replace with the desired value
     
     # Deconvolution
     wDest = np.zeros_like(wY)
-    wDest = HV_Deconvolve(wX, wY, wDest, IRF_data, SmoothError)
+    wDest = HV_Deconvolve(wX, wY, wDest, IRF_data, SmoothError, NIter)
 
     end_time = time.time()
 
