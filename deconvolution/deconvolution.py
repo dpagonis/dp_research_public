@@ -11,7 +11,7 @@ import time
 from scipy.integrate import trapz
 from scipy import interpolate
 from scipy import signal
-
+from numba import njit, prange
 
 def AdjGuess(wG, wE, NSmooth):
     if NSmooth == 0 or NSmooth == 1:
@@ -275,6 +275,7 @@ def Deconvolve_DblExp(wX, wY, wDest, Tau1, A1, Tau2, A2, NIter, SmoothError):
     
     #downsample 
     wDest = resample(wDest_upsampled, len(wX))
+    
     return wDest
 
 def HV_Deconvolve(wX, wY, wDest, IRF_data, SmoothError, NIter):
@@ -297,6 +298,14 @@ def HV_Deconvolve(wX, wY, wDest, IRF_data, SmoothError, NIter):
     # Upsample
     wY_upsampled = np.interp(new_indices, old_indices, wY)
     wX_upsampled = np.interp(new_indices, old_indices, wX)
+
+    # Assuming wY_upsampled and wX_upsampled are NumPy arrays
+    wY_upsampled_length = len(wY_upsampled)
+    wX_upsampled_length = len(wX_upsampled)
+
+    print("Length of wY_upsampled:", wY_upsampled_length)
+    print("Length of wX_upsampled:", wX_upsampled_length)
+
 
     wError = np.zeros_like(wY_upsampled)
     wConv = np.zeros_like(wY_upsampled)
@@ -334,7 +343,28 @@ def HV_Deconvolve(wX, wY, wDest, IRF_data, SmoothError, NIter):
     
     #downsample 
     wDest = resample(wDest_upsampled, len(wX))
+
     return wDest
+
+@njit(parallel=True)
+def HV_Convolve_chunk(wX, wY, A1, A2, Tau1, Tau2, wConv, start, end):
+    wY_i = np.empty(len(wX))
+    wKernel = np.empty(len(wX))
+    for idx in prange(start, end):
+        # Get A and tau values at time i
+        A1_i = A1[idx]
+        A2_i = A2[idx]
+        Tau1_i = Tau1[idx]
+        Tau2_i = Tau2[idx]
+
+        # Create the kernel
+        wX_kernel = np.linspace(0, 10 * max(Tau1_i, Tau2_i), len(wX))
+        wKernel[:idx+1] = (A1_i / Tau1_i) * np.exp(-wX_kernel[:idx+1] / Tau1_i) + (A2_i / Tau2_i) * np.exp(-wX_kernel[:idx+1] / Tau2_i)
+        np.flip(wKernel[:idx+1])  # Flip the order of wKernel
+
+        # Perform the convolution
+        wY_i[:idx+1] = wY[:idx+1]
+        wConv[idx] = np.dot(wY_i[:idx+1], wKernel[:idx+1])
 
 def HV_Convolve(wX, wY, IRF_Data):
     """Perform convolution at each point and store results in WConv."""
@@ -354,34 +384,13 @@ def HV_Convolve(wX, wY, IRF_Data):
     # Prepare destination array
     wConv = np.zeros_like(wY)
 
-    # Loop through each point in wX
-    for i in range(len(wX)):
-        print(i)
-        # Get A and tau values at time i
-        A1_i = A1[i]
-        A2_i = A2[i]
-        Tau1_i = Tau1[i]
-        Tau2_i = Tau2[i]
+    # Set your chunk size
+    chunk_size = 1000
 
-        # Make wX_kernel that goes from zero to 10*tau at the same time spacing as wX, starting at 0
-        wX_kernel = np.linspace(0, 10 * max(Tau1_i, Tau2_i), len(wX))
-        wKernel = (A1_i / Tau1_i) * np.exp(-wX_kernel / Tau1_i) + (A2_i / Tau2_i) * np.exp(-wX_kernel / Tau2_i)
-        wKernel = np.flip(wKernel)  # Flip the order of wKernel
-        
-        # Grab the subset of data from wY that ends at point i
-        # This subset has the same length as wKernel and wX_kernel
-        # Apply boundary condition that for points before time zero, we just use the first value of wY
-        wY_i = wY[:i+1]
-        
-        # Perform the dot product using Kahan summation
-        dot = 0.0
-        c = 0.0
-        for j in range(len(wY_i)):
-            prod = wY_i[j] * wKernel[j] - c
-            temp = dot + prod
-            c = (temp - dot) - prod
-            dot = temp
-        wConv[i] = dot
+    # Process the data in chunks
+    for start in range(0, len(wX), chunk_size):
+        end = min(start + chunk_size, len(wX))  # Ensure the last chunk doesn't exceed the length of wX
+        HV_Convolve_chunk(wX, wY, A1, A2, Tau1, Tau2, wConv, start, end)
 
     return wConv
 
