@@ -303,8 +303,8 @@ def HV_Deconvolve(wX, wY, wDest, IRF_data, SmoothError, NIter):
     wY_upsampled_length = len(wY_upsampled)
     wX_upsampled_length = len(wX_upsampled)
 
-    print("Length of wY_upsampled:", wY_upsampled_length)
-    print("Length of wX_upsampled:", wX_upsampled_length)
+    # print("Length of wY_upsampled:", wY_upsampled_length)
+    # print("Length of wX_upsampled:", wX_upsampled_length)
 
 
     wError = np.zeros_like(wY_upsampled)
@@ -320,6 +320,7 @@ def HV_Deconvolve(wX, wY, wDest, IRF_data, SmoothError, NIter):
         
         # Do the convolution
         wConv = HV_Convolve(wX_upsampled, wY_upsampled, IRF_data)
+        wConv = wConv/points_per_interval
 
         wError[:] = wConv - wY_upsampled
         LastR2 = R2
@@ -348,8 +349,6 @@ def HV_Deconvolve(wX, wY, wDest, IRF_data, SmoothError, NIter):
 
 @njit(parallel=True)
 def HV_Convolve_chunk(wX, wY, A1, A2, Tau1, Tau2, wConv, start, end):
-    wY_i = np.empty(len(wX))
-    wKernel = np.empty(len(wX))
     for idx in prange(start, end):
         # Get A and tau values at time i
         A1_i = A1[idx]
@@ -358,13 +357,25 @@ def HV_Convolve_chunk(wX, wY, A1, A2, Tau1, Tau2, wConv, start, end):
         Tau2_i = Tau2[idx]
 
         # Create the kernel
-        wX_kernel = np.linspace(0, 10 * max(Tau1_i, Tau2_i), len(wX))
-        wKernel[:idx+1] = (A1_i / Tau1_i) * np.exp(-wX_kernel[:idx+1] / Tau1_i) + (A2_i / Tau2_i) * np.exp(-wX_kernel[:idx+1] / Tau2_i)
-        np.flip(wKernel[:idx+1])  # Flip the order of wKernel
+        max_tau = max(Tau1_i, Tau2_i)
+        spacing = wX[1] - wX[0]  # assuming wX is evenly spaced
+        num_steps = int(10 * max_tau / spacing)
+        wX_kernel = np.linspace(0, 10 * max_tau, num_steps)
+        wKernel = (A1_i / Tau1_i) * np.exp(-wX_kernel / Tau1_i) + (A2_i / Tau2_i) * np.exp(-wX_kernel / Tau2_i)
+        wKernel = np.flip(wKernel)
+
+        # Pad wY_i manually if necessary
+        if idx < num_steps:
+            # Use wY[0] for padding
+            padding = np.full(num_steps - idx-1, wY[0])
+            wY_i = np.concatenate((padding, wY[:idx+1]))
+        else:
+            wY_i = wY[idx-num_steps+1 : idx+1]
+
 
         # Perform the convolution
-        wY_i[:idx+1] = wY[:idx+1]
-        wConv[idx] = np.dot(wY_i[:idx+1], wKernel[:idx+1])
+        wConv[idx] = np.dot(wY_i, wKernel)
+
 
 def HV_Convolve(wX, wY, IRF_Data):
     """Perform convolution at each point and store results in WConv."""
@@ -398,8 +409,8 @@ def main():
     start_time = time.time()
     
     # Load the data from the CSV file
-    directory = 'C:/Users/hjver/Documents/dp_research_public/deconvolution/data/'
-    # directory = 'C:/Users/demetriospagonis/Box/github/dp_research_public/deconvolution/data/'
+    # directory = 'C:/Users/hjver/Documents/dp_research_public/deconvolution/data/'
+    directory = 'C:/Users/demetriospagonis/Box/github/dp_research_public/deconvolution/data/'
     datafile = '2019_08_07_HNO3Data.csv'
 
     base_str = datafile.rstrip('.csv')
@@ -417,7 +428,7 @@ def main():
     # A1 = 0.7072  # Replace with the desired value
     # Tau2 = 55.2182  # Replace with the desired value
     # A2 = 1.0-A1  # Replace with the desired value
-    NIter = 0  # Replace with the desired value
+    NIter = 5  # Replace with the desired value
     SmoothError = 0  # Replace with the desired value
     
     # Deconvolution
