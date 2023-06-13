@@ -10,8 +10,12 @@ import os
 import time
 from scipy.integrate import trapz
 from scipy import interpolate
-from scipy import signal
 from numba import njit, prange
+import openpyxl
+from openpyxl import Workbook
+from openpyxl.utils.dataframe import dataframe_to_rows
+import netCDF4
+
 
 def AdjGuess(wG, wE, NSmooth):
     if NSmooth == 0 or NSmooth == 1:
@@ -87,6 +91,10 @@ def DP_FitDblExp(wY, wX, PtA=None, PtB=None, x0=None, x1=None, y0=None, y1=None,
 def igor_to_datetime(igor_timestamp):
     base_datetime = datetime(1904, 1, 1)
     return base_datetime + timedelta(seconds=igor_timestamp)
+
+def ict_to_datetime(ict_timestamp, measurement_date):
+    base_datetime = datetime.strptime(measurement_date, "%Y_%m_%d")
+    return base_datetime + timedelta(seconds=int(ict_timestamp))
 
 def plot_and_save_data(csv_filename, directory):
     # Load the data from the CSV file
@@ -299,14 +307,6 @@ def HV_Deconvolve(wX, wY, wDest, IRF_data, SmoothError, NIter):
     wY_upsampled = np.interp(new_indices, old_indices, wY)
     wX_upsampled = np.interp(new_indices, old_indices, wX)
 
-    # Assuming wY_upsampled and wX_upsampled are NumPy arrays
-    wY_upsampled_length = len(wY_upsampled)
-    wX_upsampled_length = len(wX_upsampled)
-
-    # print("Length of wY_upsampled:", wY_upsampled_length)
-    # print("Length of wX_upsampled:", wX_upsampled_length)
-
-
     wError = np.zeros_like(wY_upsampled)
     wConv = np.zeros_like(wY_upsampled)
     wLastConv = np.zeros_like(wY_upsampled)
@@ -405,13 +405,34 @@ def HV_Convolve(wX, wY, IRF_Data):
 
     return wConv
 
+# def write_output_to_excel(output_data, output_file):
+    # Load the workbook or create a new one if it doesn't exist
+    try:
+        workbook = openpyxl.load_workbook(output_file)
+    except FileNotFoundError:
+        workbook = Workbook()
+
+    # Get the next sheet number based on the number of existing sheets
+    sheet_number = len(workbook.sheetnames) + 1
+
+    # Create a new sheet for this run
+    sheet_name = f"Run {sheet_number}"
+    sheet = workbook.create_sheet(sheet_name)
+
+    # Write the output data to the sheet
+    for row in dataframe_to_rows(output_data, index=False, header=True):
+        sheet.append(row)
+
+    # Save the workbook
+    workbook.save(output_file)
+
 def main():
     start_time = time.time()
     
     # Load the data from the CSV file
-    # directory = 'C:/Users/hjver/Documents/dp_research_public/deconvolution/data/'
-    directory = 'C:/Users/demetriospagonis/Box/github/dp_research_public/deconvolution/data/'
+    directory = 'C:/Users/hjver/Documents/dp_research_public/deconvolution/data/'
     datafile = '2019_08_07_HNO3Data.csv'
+    ict_file = 'FIREXAQ-DACOM_DC8_20190807_R0.ict'
 
     base_str = datafile.rstrip('.csv')
     date_str = datafile[:10]
@@ -421,40 +442,96 @@ def main():
     wX = data['time'].values
     wY = data['HNO3_190_Hz'].values
 
+    # Load the ICT file data
+    ict_data = pd.read_csv(directory+ict_file, skiprows=35)
+    wX_ict = ict_data['Time_Start'].values  # Assuming 'Time_Start' is your time column
+    wY_ict = ict_data['CO_DACOM'].values
+
+    # Convert both time series to datetime
+    wX_datetime = [igor_to_datetime(ts) for ts in wX]
+    wX_ict_datetime = [ict_to_datetime(ts, date_str) for ts in wX_ict]
+
+    # Make sure that both time series start at the same point and have the same length
+    common_start = max(wX_datetime[0], wX_ict_datetime[0])
+    common_end = min(wX_datetime[-1], wX_ict_datetime[-1])
+    common_length = min(len(wX_datetime), len(wX_ict_datetime))
+    common_wX = np.linspace(common_start.timestamp(), common_end.timestamp(), common_length)
+
+    # Convert datetime objects to timestamps
+    wX_timestamp = [dt.timestamp() for dt in wX_datetime]
+    wX_ict_timestamp = [dt.timestamp() for dt in wX_ict_datetime]
+
+    # Interpolate both series to the common time basis
+    interp_wY = np.interp(common_wX, wX_timestamp, wY)
+    interp_wY_ict = np.interp(common_wX, wX_ict_timestamp, wY_ict)
+
     IRF_data = pd.read_csv(directory+IRF_filename)
 
     # Set the parameters for deconvolution
-    # Tau1 = 4.9327  # Replace with the desired value
-    # A1 = 0.7072  # Replace with the desired value
-    # Tau2 = 55.2182  # Replace with the desired value
-    # A2 = 1.0-A1  # Replace with the desired value
     NIter = 5  # Replace with the desired value
     SmoothError = 0  # Replace with the desired value
     
-    # Deconvolution
-    wDest = np.zeros_like(wY)
-    wDest = HV_Deconvolve(wX, wY, wDest, IRF_data, SmoothError, NIter)
+    # Deconvolution for CSV data
+    wDest = np.zeros_like(interp_wY)
+    wDest = HV_Deconvolve(common_wX, interp_wY, wDest, IRF_data, SmoothError, NIter)
+
+    # Deconvolution for ICT data
+    # wDest_ict = np.zeros_like(interp_wY_ict)
+    # wDest_ict = HV_Deconvolve(common_wX, interp_wY_ict, wDest_ict, IRF_data, SmoothError, NIter)
+
+    # print(wDest)
+    # print(wDest_ict)
+
+    # Save wX, wY, and wDest to a CSV file. A new sheet is generated each time program runs
+    # output_data = pd.DataFrame({'time': wX, 'original_signal': wY, 'deconvolved_signal': wDest})
+    # output_file = directory + f'{base_str}_Deconvolution.xlsx'
+    # write_output_to_excel(output_data, output_file)
 
     end_time = time.time()
 
-    # Plot the figures
-    plt.figure(figsize=(10, 6))
+    # Original data correlation plot
+    plt.figure(figsize=(6, 4))
+    plt.scatter(interp_wY_ict, interp_wY, marker='.', color='b')
+    plt.xlabel('CO')
+    plt.ylabel('HNO3')
+    plt.title('Original Data Correlation Plot')
+    plt.tight_layout()
+    plt.savefig(directory + f'{base_str}_Original_Correlation.png')
+    plt.show()
 
-    # Original time series and deconvolution
+    # Deconvolved data correlation plot
+    plt.figure(figsize=(6, 4))
+    plt.scatter(interp_wY_ict, wDest, marker='.', color='b')
+    plt.xlabel('CO')
+    plt.ylabel('Deconvolved HNO3')
+    plt.title('Deconvolved Data Correlation Plot')
+    plt.tight_layout()
+    plt.savefig(directory + f'{base_str}_Deconvolved_Correlation.png')
+    plt.show()
+
+    # Original time series for CSV and ICT data, Main Figure
+    plt.figure(figsize=(10, 8))
     plt.subplot(2, 1, 1)
-    plt.plot(wX, wY, label='Original')
-    plt.plot(wX, wDest, label='Deconvolution')
+    plt.plot(common_wX, interp_wY, label='HNO3')
+    plt.plot(common_wX, interp_wY_ict, label=' CO')
+    plt.plot(common_wX, wDest, label='Deconvolved HNO3')
     plt.xlabel('Time')
     plt.ylabel('Signal')
+    plt.title('Original and Deconvolved Signal')
     plt.legend()
 
-    # Deconvolution only
+    # Deconvolved only
     plt.subplot(2, 1, 2)
-    plt.plot(wX, wDest, label='Deconvolution',color='C1')
+    plt.plot(common_wX, wDest, label='Deconvolved HNO3',color='C1')
     plt.xlabel('Time')
     plt.ylabel('Signal')
+    plt.title('Deconvolved Signal Only')
     plt.legend()
     plt.tight_layout()
+
+    # Save and display the main figure
+    plt.savefig(directory + f'{base_str}_Deconvolution.png')
+    plt.show()
 
     # Calculate the integrals
     integral_wY = trapz(wY,wX)
@@ -469,7 +546,6 @@ def main():
     total_runtime = end_time - start_time
     print("Total runtime: {:.1f} seconds".format(total_runtime))
 
-    
     # Save the figure as a PNG file
     plt.savefig(directory + f'{base_str}_Deconvolution.png')
     plt.show()
