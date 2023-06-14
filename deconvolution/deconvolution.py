@@ -405,30 +405,10 @@ def HV_Convolve(wX, wY, IRF_Data):
 
     return wConv
 
-# def write_output_to_excel(output_data, output_file):
-    # Load the workbook or create a new one if it doesn't exist
-    try:
-        workbook = openpyxl.load_workbook(output_file)
-    except FileNotFoundError:
-        workbook = Workbook()
-
-    # Get the next sheet number based on the number of existing sheets
-    sheet_number = len(workbook.sheetnames) + 1
-
-    # Create a new sheet for this run
-    sheet_name = f"Run {sheet_number}"
-    sheet = workbook.create_sheet(sheet_name)
-
-    # Write the output data to the sheet
-    for row in dataframe_to_rows(output_data, index=False, header=True):
-        sheet.append(row)
-
-    # Save the workbook
-    workbook.save(output_file)
-
 def main():
-    start_time = time.time()
-    
+
+    start_time=time.time()
+
     # Load the data from the CSV file
     directory = 'C:/Users/hjver/Documents/dp_research_public/deconvolution/data/'
     datafile = '2019_08_07_HNO3Data.csv'
@@ -475,18 +455,6 @@ def main():
     wDest = np.zeros_like(interp_wY)
     wDest = HV_Deconvolve(common_wX, interp_wY, wDest, IRF_data, SmoothError, NIter)
 
-    # Deconvolution for ICT data
-    # wDest_ict = np.zeros_like(interp_wY_ict)
-    # wDest_ict = HV_Deconvolve(common_wX, interp_wY_ict, wDest_ict, IRF_data, SmoothError, NIter)
-
-    # print(wDest)
-    # print(wDest_ict)
-
-    # Save wX, wY, and wDest to a CSV file. A new sheet is generated each time program runs
-    # output_data = pd.DataFrame({'time': wX, 'original_signal': wY, 'deconvolved_signal': wDest})
-    # output_file = directory + f'{base_str}_Deconvolution.xlsx'
-    # write_output_to_excel(output_data, output_file)
-
     end_time = time.time()
 
     # Original data correlation plot
@@ -497,7 +465,6 @@ def main():
     plt.title('Original Data Correlation Plot')
     plt.tight_layout()
     plt.savefig(directory + f'{base_str}_Original_Correlation.png')
-    plt.show()
 
     # Deconvolved data correlation plot
     plt.figure(figsize=(6, 4))
@@ -507,7 +474,6 @@ def main():
     plt.title('Deconvolved Data Correlation Plot')
     plt.tight_layout()
     plt.savefig(directory + f'{base_str}_Deconvolved_Correlation.png')
-    plt.show()
 
     # Original time series for CSV and ICT data, Main Figure
     plt.figure(figsize=(10, 8))
@@ -529,31 +495,18 @@ def main():
     plt.legend()
     plt.tight_layout()
 
-    # Save and display the main figure
-    plt.savefig(directory + f'{base_str}_Deconvolution.png')
-    plt.show()
-
     # Calculate the integrals
     integral_wY = trapz(wY,wX)
     integral_wDest = trapz(wDest,wX)
-    
-    # # Print the integrals
-    # print("Integral of wY: {:.1f}".format(integral_wY))
-    # print("Integral of wDest: {:.1f}".format(integral_wDest))
 
     print("Area ratio: {:.4f}".format(1+(integral_wDest-integral_wY)/integral_wY))
+    
     # Calculate the total runtime
     total_runtime = end_time - start_time
     print("Total runtime: {:.1f} seconds".format(total_runtime))
 
-    # Save the figure as a PNG file
-    plt.savefig(directory + f'{base_str}_Deconvolution.png')
+    # Display all plots
     plt.show()
-
-    # Save wX, wY, and wDest to a CSV file
-    output_data = pd.DataFrame({'time': wX, 'original_signal': wY, 'deconvolved_signal': wDest})
-    output_file = directory + f'{base_str}_Deconvolution.csv'
-    output_data.to_csv(output_file, index=False)
 
 
 if __name__ == "__main__":
