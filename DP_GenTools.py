@@ -126,7 +126,7 @@ class VBS_May13(VBS):
 class VBS_FIREX(VBS):
     #VBS fitted to FIREX-AQ thermal denuder data
     Name = "FIREX-AQ"
-    Fi = np.array([0.333333,0.166667,0.166667,0.333333])
-    CStar_298 = np.array([0.01,0.1,100,10000])
-    dHvap = np.array([(131-11*math.log10(x))*1000 for x in CStar_298])
+    Fi = np.array([0.2,0.1,0.2,0.1,0,0.2,0.2])
+    CStar_298 = np.array([0.01,0.1,1,10,100,1000,10000])
+    dHvap = np.array([(85-4*math.log10(x))*1000 for x in CStar_298])
   #end of class VBS_FIREX
