@@ -11,8 +11,6 @@ import time
 from scipy.integrate import trapz
 from scipy import interpolate
 from numba import njit, prange
-from openpyxl.utils.dataframe import dataframe_to_rows
-import netCDF4
 
 
 def AdjGuess(wG, wE, NSmooth):
