@@ -15,7 +15,7 @@ ResidenceTimeTAT = 0.019 #s
 
 # Load data on root process and distribute it among all processes
 if rank == 0:
-    data = pd.read_csv('FIREX_InletEvap_Input_Test.csv')
+    data = pd.read_csv('2023_06_15_FIREX_InletEvap_Input_Test.csv')
     chunks = np.array_split(data, size) # split data into chunks
 else:
     chunks = None
