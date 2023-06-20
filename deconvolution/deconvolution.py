@@ -11,8 +11,6 @@ import time
 from scipy.integrate import trapz
 from scipy import interpolate
 from numba import njit, prange
-import openpyxl
-from openpyxl import Workbook
 from openpyxl.utils.dataframe import dataframe_to_rows
 import netCDF4
 
@@ -458,42 +456,42 @@ def main():
     end_time = time.time()
 
     # Original data correlation plot
-    plt.figure(figsize=(6, 4))
-    plt.scatter(interp_wY_ict, interp_wY, marker='.', color='b')
-    plt.xlabel('CO')
-    plt.ylabel('HNO3')
-    plt.title('Original Data Correlation Plot')
-    plt.tight_layout()
-    plt.savefig(directory + f'{base_str}_Original_Correlation.png')
+    # plt.figure(figsize=(6, 4))
+    # plt.scatter(interp_wY_ict, interp_wY, marker='.', color='b')
+    # plt.xlabel('CO')
+    # plt.ylabel('HNO3')
+    # plt.title('Original Data Correlation Plot')
+    # plt.tight_layout()
+    # plt.savefig(directory + f'{base_str}_Original_Correlation.png')
 
     # Deconvolved data correlation plot
-    plt.figure(figsize=(6, 4))
-    plt.scatter(interp_wY_ict, wDest, marker='.', color='b')
-    plt.xlabel('CO')
-    plt.ylabel('Deconvolved HNO3')
-    plt.title('Deconvolved Data Correlation Plot')
-    plt.tight_layout()
-    plt.savefig(directory + f'{base_str}_Deconvolved_Correlation.png')
+    # plt.figure(figsize=(6, 4))
+    # plt.scatter(interp_wY_ict, wDest, marker='.', color='b')
+    # plt.xlabel('CO')
+    # plt.ylabel('Deconvolved HNO3')
+    # plt.title('Deconvolved Data Correlation Plot')
+    # plt.tight_layout()
+    # plt.savefig(directory + f'{base_str}_Deconvolved_Correlation.png')
 
     # Original time series for CSV and ICT data, Main Figure
-    plt.figure(figsize=(10, 8))
-    plt.subplot(2, 1, 1)
-    plt.plot(common_wX, interp_wY, label='HNO3')
-    plt.plot(common_wX, interp_wY_ict, label=' CO')
-    plt.plot(common_wX, wDest, label='Deconvolved HNO3')
-    plt.xlabel('Time')
-    plt.ylabel('Signal')
-    plt.title('Original and Deconvolved Signal')
-    plt.legend()
+    # plt.figure(figsize=(10, 8))
+    # plt.subplot(2, 1, 1)
+    # plt.plot(common_wX, interp_wY, label='HNO3')
+    # plt.plot(common_wX, interp_wY_ict, label=' CO')
+    # plt.plot(common_wX, wDest, label='Deconvolved HNO3')
+    # plt.xlabel('Time')
+    # plt.ylabel('Signal')
+    # plt.title('Original and Deconvolved Signal')
+    # plt.legend()
 
     # Deconvolved only
-    plt.subplot(2, 1, 2)
-    plt.plot(common_wX, wDest, label='Deconvolved HNO3',color='C1')
-    plt.xlabel('Time')
-    plt.ylabel('Signal')
-    plt.title('Deconvolved Signal Only')
-    plt.legend()
-    plt.tight_layout()
+    # plt.subplot(2, 1, 2)
+    # plt.plot(common_wX, wDest, label='Deconvolved HNO3',color='C1')
+    # plt.xlabel('Time')
+    # plt.ylabel('Signal')
+    # plt.title('Deconvolved Signal Only')
+    # plt.legend()
+    # plt.tight_layout()
 
     # Calculate the integrals
     integral_wY = trapz(wY,wX)
@@ -506,8 +504,8 @@ def main():
     print("Total runtime: {:.1f} seconds".format(total_runtime))
 
     # Display all plots
-    plt.show()
+    # plt.show()
 
 
 if __name__ == "__main__":
-    main()
+     main()
