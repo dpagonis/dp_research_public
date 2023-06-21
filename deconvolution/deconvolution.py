@@ -424,16 +424,28 @@ def main():
     data = pd.read_csv(directory+datafile)
     wX = data['time'].values
     wY = data['HNO3_190_Hz'].values
-    Background = data['N2ZeroKey'].values 
-    
+    Background = data['N2ZeroKey'].values
+
+    # Calculate average 'HNO3' values when 'Background' is 1 and interpolate these values over the entire dataset
+    background_indices = np.where(Background == 1)[0]
+    # Create an array with the same length as 'background_indices' filled with the average value
+    background_values = np.full_like(background_indices, np.mean(wY[background_indices]))
+
     # Load the ICT file data
     ict_data = pd.read_csv(directory+ict_file, skiprows=35)
     wX_ict = ict_data['Time_Start'].values  # Assuming 'Time_Start' is your time column
     wY_ict = ict_data['CO_DACOM'].values
 
+    # Replace any CO values below 0 with NaN
+    wY_ict[wY_ict < 0] = np.nan
+
     # Convert both time series to datetime
     wX_datetime = [igor_to_datetime(ts) for ts in wX]
     wX_ict_datetime = [ict_to_datetime(ts, date_str) for ts in wX_ict]
+
+    # Convert datetime objects to timestamps
+    wX_timestamp = [dt.timestamp() for dt in wX_datetime]
+    wX_ict_timestamp = [dt.timestamp() for dt in wX_ict_datetime]
 
     # Make sure that both time series start at the same point and have the same length
     common_start = max(wX_datetime[0], wX_ict_datetime[0])
@@ -441,13 +453,15 @@ def main():
     common_length = min(len(wX_datetime), len(wX_ict_datetime))
     common_wX = np.linspace(common_start.timestamp(), common_end.timestamp(), common_length)
 
-    # Convert datetime objects to timestamps
-    wX_timestamp = [dt.timestamp() for dt in wX_datetime]
-    wX_ict_timestamp = [dt.timestamp() for dt in wX_ict_datetime]
-
+    # Now, 'background_values' is an array of the same size as 'background_indices'
+    background_interpolated_common_wX = np.interp(common_wX, wX[background_indices], background_values)
+    
     # Interpolate both series to the common time basis
     interp_wY = np.interp(common_wX, wX_timestamp, wY)
     interp_wY_ict = np.interp(common_wX, wX_ict_timestamp, wY_ict)
+
+    # Subtract the background from the original 'HNO3' data
+    interp_wY_no_bg = interp_wY - background_interpolated_common_wX
 
     IRF_data = pd.read_csv(directory+IRF_filename)
 
@@ -459,8 +473,46 @@ def main():
     wDest = np.zeros_like(interp_wY)
     wDest = HV_Deconvolve(common_wX, interp_wY, wDest, IRF_data, SmoothError, NIter)
 
-    end_time = time.time()
+    # Subtract the background from the deconvolved 'HNO3' data
+    wDest_no_bg = wDest - background_interpolated_common_wX
 
+    # Calculate the integrals
+    integral_wY = trapz(wY,wX)
+    integral_wDest = trapz(wDest,wX)
+
+    print("Area ratio: {:.4f}".format(1+(integral_wDest-integral_wY)/integral_wY))
+
+    # Calculate the total runtime
+    end_time = time.time()
+    total_runtime = end_time - start_time
+    print("Total runtime: {:.1f} seconds".format(total_runtime))
+
+    # Display all plots
+
+    # Convert the time series to timestamps for interpolation
+    wX_datetime_timestamp = [dt.timestamp() for dt in wX_datetime]
+    wX_ict_datetime_timestamp = [dt.timestamp() for dt in wX_ict_datetime]
+
+    # Interpolate the CO data to the HNO3 time series
+    wY_ict_interpolated = np.interp(wX_datetime_timestamp, wX_ict_datetime_timestamp, wY_ict)
+
+    # Plot original data with background subtracted
+    plt.figure()
+    plt.plot(common_wX, interp_wY_no_bg, label='Original HNO3')
+    plt.plot(common_wX, interp_wY_ict, label='Interpolated CO')
+    plt.title('Original HNO3 Data with Background Subtraction')
+    plt.legend()
+
+    # Plot deconvolved data with background subtracted
+    plt.figure()
+    plt.plot(common_wX, wDest_no_bg, label='Deconvolved')
+    plt.plot(common_wX, interp_wY_ict, label='Interpolated CO')
+    plt.title('Deconvolved HNO3 Data with Background Subtraction')
+    plt.legend()
+    
+    plt.show()
+
+    # CORRELATION PLOTS    
     # Original data correlation plot
     # plt.figure(figsize=(6, 4))
     # plt.scatter(interp_wY_ict, interp_wY, marker='.', color='b')
@@ -479,6 +531,7 @@ def main():
     # plt.tight_layout()
     # plt.savefig(directory + f'{base_str}_Deconvolved_Correlation.png')
 
+    # TIME SERIES
     # Original time series for CSV and ICT data, Main Figure
     # plt.figure(figsize=(10, 8))
     # plt.subplot(2, 1, 1)
@@ -499,64 +552,50 @@ def main():
     # plt.legend()
     # plt.tight_layout()
 
-    # Calculate the integrals
-    integral_wY = trapz(wY,wX)
-    integral_wDest = trapz(wDest,wX)
-
-    print("Area ratio: {:.4f}".format(1+(integral_wDest-integral_wY)/integral_wY))
-
-    # Calibration Plots
+    # BACKGROUND PLOTS
     # Determine the start and end indices of the plots
-    Background = np.where(data['N2ZeroKey'].values == 1, 1, 0)  # Make sure we have 0s and 1s only
-    start_indices = np.where(np.diff(Background) == 1)[0] + 1
-    end_indices = np.where(np.diff(Background) == -1)[0] + 1
+    # Background = np.where(data['N2ZeroKey'].values == 1, 1, 0)  # Make sure we have 0s and 1s only
+    # start_indices = np.where(np.diff(Background) == 1)[0] + 1
+    # end_indices = np.where(np.diff(Background) == -1)[0] + 1
 
     # Ensure each start index has a corresponding end index
-    if len(start_indices) > len(end_indices):
-        start_indices = start_indices[:len(end_indices)]
-    elif len(start_indices) < len(end_indices):
-        end_indices = end_indices[:len(start_indices)]
+    # if len(start_indices) > len(end_indices):
+        # start_indices = start_indices[:len(end_indices)]
+    # elif len(start_indices) < len(end_indices):
+        # end_indices = end_indices[:len(start_indices)]
 
     # Add points before and after each calibration period
-    start_indices = np.maximum(start_indices - 15, 0)  # Make sure the index is not below 0
-    end_indices = np.minimum(end_indices + 45, len(wX) - 1)  # Make sure the index is not above the last index
+    # start_indices = np.maximum(start_indices - 15, 0)  # Make sure the index is not below 0
+    # end_indices = np.minimum(end_indices + 45, len(wX) - 1)  # Make sure the index is not above the last index
 
     # Convert wX from float timestamps to datetime
-    wX_datetime = pd.to_datetime(wX, unit='s')
+    # wX_datetime = pd.to_datetime(wX, unit='s')
 
     # Create a grid of subplots based on the number of calibrations
-    n_plots = len(start_indices)
-    n_rows = int(np.ceil(np.sqrt(n_plots)))
-    n_cols = int(np.ceil(n_plots / n_rows))
-    fig, axs = plt.subplots(n_rows, n_cols, figsize=(6 * n_cols, 5 * n_rows), squeeze=False)  # Added squeeze=False to always return 2D array
+    # n_plots = len(start_indices)
+    # n_rows = int(np.ceil(np.sqrt(n_plots)))
+    # n_cols = int(np.ceil(n_plots / n_rows))
+    # fig, axs = plt.subplots(n_rows, n_cols, figsize=(6 * n_cols, 5 * n_rows), squeeze=False)  # Added squeeze=False to always return 2D array
 
     # Remove excess subplots
-    for i in range(n_plots, n_rows * n_cols):
-        fig.delaxes(axs.flatten()[i])  # Flatten the axs array and delete excess subplots
+    # for i in range(n_plots, n_rows * n_cols):
+        # fig.delaxes(axs.flatten()[i])  # Flatten the axs array and delete excess subplots
 
     # Find global y limits
-    y_min = min(np.min(wY), np.min(wDest))
-    y_max = max(np.max(wY), np.max(wDest))
+    # y_min = min(np.min(wY), np.min(wDest))
+    # y_max = max(np.max(wY), np.max(wDest))
  
     # Plot each calibration
-    for i, (start, end) in enumerate(zip(start_indices, end_indices)):
-        ax = axs.flatten()[i]  # Flatten the axs array for indexing
-        ax.plot(wX_datetime[start:end], wY[start:end], label='HNO3')
-        ax.plot(wX_datetime[start:end], wDest[start:end], label='Deconvolved HNO3')
-        ax.fill_between(wX_datetime[start:end], y_min, y_max, where=Background[start:end] == 1, color='gray', alpha=0.5)
-        ax.set_xlabel('Time')
-        ax.set_ylabel('HNO3')
-        ax.legend()
+    # for i, (start, end) in enumerate(zip(start_indices, end_indices)):
+        # ax = axs.flatten()[i]  # Flatten the axs array for indexing
+        # ax.plot(wX_datetime[start:end], wY[start:end], label='HNO3')
+        # ax.plot(wX_datetime[start:end], wDest[start:end], label='Deconvolved HNO3')
+        # ax.fill_between(wX_datetime[start:end], y_min, y_max, where=Background[start:end] == 1, color='gray', alpha=0.5)
+        # ax.set_xlabel('Time')
+        # ax.set_ylabel('HNO3')
+        # ax.legend()
 
-    plt.tight_layout()
-
-    # Calculate the total runtime
-    end_time = time.time()
-    total_runtime = end_time - start_time
-    print("Total runtime: {:.1f} seconds".format(total_runtime))
-
-    # Display all plots
-    plt.show()
+    # plt.tight_layout()
 
 if __name__ == "__main__":
      main()
