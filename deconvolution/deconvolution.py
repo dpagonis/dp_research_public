@@ -426,10 +426,41 @@ def main():
     wY = data['HNO3_190_Hz'].values
     Background = data['N2ZeroKey'].values
 
-    # Calculate average 'HNO3' values when 'Background' is 1 and interpolate these values over the entire dataset
-    background_indices = np.where(Background == 1)[0]
-    # Create an array with the same length as 'background_indices' filled with the average value
-    background_values = np.full_like(background_indices, np.mean(wY[background_indices]))
+    # Find the start and end indices of each background measurement
+    bg_start_indices = np.where(np.diff(Background) == 1)[0] + 1
+    bg_end_indices = np.where(np.diff(Background) == -1)[0]
+
+    # Handle the case where the Background starts with 1
+    if Background[0] == 1:
+        bg_start_indices = np.insert(bg_start_indices, 0, 0)
+
+    # Handle the case where the Background ends with 1
+    if Background[-1] == 1:
+        bg_end_indices = np.append(bg_end_indices, len(Background) - 1)
+
+    # Verify that there are equal numbers of start and end indices
+    assert len(bg_start_indices) == len(bg_end_indices), "Number of start and end indices for background measurements do not match"
+
+    # Calculate a separate average for each segment and store these averages along with their time points
+    background_averages = []
+    background_average_times = []
+
+    for start, end in zip(bg_start_indices, bg_end_indices):
+        # Exclude the first 10s and last 5s from each segment
+        start += 10
+        end -= 5
+        # Make sure start is still before end after adjusting indices
+        if start >= end:
+            print(f"Skipping background segment from {start} to {end} beacause it's too short after excluding the first 10s and last 5s")
+            continue
+        segment_average = np.mean(wY[start:end+1])
+        background_averages.append(segment_average)
+        # assuming that each segment's representative time point is the average of its start and end times
+        segment_time = np.mean(wX[start:end+1])
+        background_average_times.append(segment_time)
+
+    # Interpolate these background averages over the entire dataset
+    background_values_interpolated = np.interp(wX, background_average_times, background_averages)
 
     # Load the ICT file data
     ict_data = pd.read_csv(directory+ict_file, skiprows=35)
@@ -454,7 +485,7 @@ def main():
     common_wX = np.linspace(common_start.timestamp(), common_end.timestamp(), common_length)
 
     # Now, 'background_values' is an array of the same size as 'background_indices'
-    background_interpolated_common_wX = np.interp(common_wX, wX[background_indices], background_values)
+    background_interpolated_common_wX = background_values_interpolated
     
     # Interpolate both series to the common time basis
     interp_wY = np.interp(common_wX, wX_timestamp, wY)
@@ -489,27 +520,37 @@ def main():
 
     # Display all plots
 
-    # Convert the time series to timestamps for interpolation
-    wX_datetime_timestamp = [dt.timestamp() for dt in wX_datetime]
-    wX_ict_datetime_timestamp = [dt.timestamp() for dt in wX_ict_datetime]
-
-    # Interpolate the CO data to the HNO3 time series
-    wY_ict_interpolated = np.interp(wX_datetime_timestamp, wX_ict_datetime_timestamp, wY_ict)
+    # Convert the common_wX timestamps to datetime objects
+    common_wX_datetime = [datetime.fromtimestamp(ts) for ts in common_wX]
 
     # Plot original data with background subtracted
     plt.figure()
-    plt.plot(common_wX, interp_wY_no_bg, label='Original HNO3')
-    plt.plot(common_wX, interp_wY_ict, label='Interpolated CO')
+    plt.plot(common_wX_datetime, interp_wY_no_bg, label='Original HNO3 - BG')
+    plt.plot(common_wX_datetime, interp_wY_ict, color='red', label='CO')
     plt.title('Original HNO3 Data with Background Subtraction')
+    plt.legend()
+
+    # Plot original data with background without subtracting it
+    plt.figure()
+    plt.plot(common_wX_datetime, interp_wY, label='Original HNO3')
+    plt.plot(common_wX_datetime, background_interpolated_common_wX, label='Interpolated BG')
+    plt.title('Original HNO3 Data and Interpolated Background')
     plt.legend()
 
     # Plot deconvolved data with background subtracted
     plt.figure()
-    plt.plot(common_wX, wDest_no_bg, label='Deconvolved')
-    plt.plot(common_wX, interp_wY_ict, label='Interpolated CO')
+    plt.plot(common_wX_datetime, wDest_no_bg, label='Deconvolved HNO3 - BG')
+    plt.plot(common_wX_datetime, interp_wY_ict, color='red', label='CO')
     plt.title('Deconvolved HNO3 Data with Background Subtraction')
     plt.legend()
-    
+
+    # Plot deconvolved data with background (without subtracting it)
+    plt.figure()
+    plt.plot(common_wX_datetime, wDest, label='Deconvolved HNO3')
+    plt.plot(common_wX_datetime, background_interpolated_common_wX, label='Interpolated BG')
+    plt.title('Deconvolved HNO3 Data and Interpolated Background')
+    plt.legend()
+
     plt.show()
 
     # CORRELATION PLOTS    
