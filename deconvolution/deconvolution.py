@@ -99,7 +99,7 @@ def ict_to_datetime(ict_timestamp, measurement_date):
     base_datetime = datetime.strptime(measurement_date, "%Y_%m_%d")
     return base_datetime + timedelta(seconds=int(ict_timestamp))
 
-def plot_and_save_data(csv_filename, directory):
+def FitIRF(csv_filename, directory):
     # Load the data from the CSV file
     data = pd.read_csv(directory+csv_filename)
 
@@ -408,7 +408,7 @@ def HV_Convolve(wX, wY, IRF_Data):
 
     return wConv
 
-def interpolate_background(Background, wY, wX):
+def HV_interpolate_background(Background, wY, wX):
     # Find the start and end indices of each background measurement
     bg_start_indices = np.where(np.diff(Background) == 1)[0] + 1
     bg_end_indices = np.where(np.diff(Background) == -1)[0]
@@ -444,7 +444,7 @@ def interpolate_background(Background, wY, wX):
         
     return background_averages, background_average_times
 
-def get_common_time_and_interpolated_data(wX, wY, wX_ict, wY_ict, date_str):
+def HV_get_common_time_and_interpolated_data(wX, wY, wX_ict, wY_ict, date_str):
     # Convert both time series to datetime
     wX_datetime = [igor_to_datetime(ts) for ts in wX]
     wX_ict_datetime = [ict_to_datetime(ts, date_str) for ts in wX_ict]
@@ -465,7 +465,7 @@ def get_common_time_and_interpolated_data(wX, wY, wX_ict, wY_ict, date_str):
     
     return common_wX, interp_wY, interp_wY_ict
 
-def subtract_background(data, time, background_averages, background_average_times):
+def HV_subtract_background(data, time, background_averages, background_average_times):
     # Interpolate the background averages over the entire dataset
     background_values_interpolated = np.interp(time, background_average_times, background_averages)
 
@@ -474,6 +474,73 @@ def subtract_background(data, time, background_averages, background_average_time
 
     return data_no_bg, background_values_interpolated
 
+def HV_generate_figures(common_wX_datetime, interp_wY, interp_wY_ict, wDest, interp_wY_no_bg, wDest_no_bg, background_interpolated_common_wX, directory, date_str):
+    # FitIRF plots
+    FitIRF_plots = plt.imread(directory + f'{date_str}_InstrumentResponseFunction.png')
+    plt.figure(figsize=(10, 8))
+    plt.imshow(FitIRF_plots)
+    plt.axis('off')
+    plt.title('FitIRF Plots')
+    plt.tight_layout()
+
+    # TIME SERIES
+    plt.figure(figsize=(10, 8))
+    plt.subplot(2, 1, 1)
+    plt.plot(common_wX_datetime, interp_wY, label='HNO3')
+    plt.plot(common_wX_datetime, interp_wY_ict, label=' CO')
+    plt.plot(common_wX_datetime, wDest, label='Deconvolved HNO3')
+    plt.xlabel('Time')
+    plt.ylabel('Signal')
+    plt.title('Original and Deconvolved Signal')
+    plt.legend()
+
+    plt.subplot(2, 1, 2)
+    plt.plot(common_wX_datetime, wDest, label='Deconvolved HNO3', color='C1')
+    plt.xlabel('Time')
+    plt.ylabel('Signal')
+    plt.title('Deconvolved Signal Only')
+    plt.legend()
+    plt.tight_layout()
+
+    # Configure x-axis tick formatter as datetime
+    time_formatter = mdates.DateFormatter('%Y-%m-%d %H:%M:%S')
+
+    # Apply the formatter to the x-axis
+    plt.gca().xaxis.set_major_formatter(time_formatter)
+
+    plt.figure()
+    plt.plot(common_wX_datetime, interp_wY_no_bg, label='Original HNO3 - BG')
+    plt.plot(common_wX_datetime, interp_wY_ict, color='red', label='CO')
+    plt.xlabel('Time')
+    plt.ylabel('Signal')
+    plt.title('Original HNO3 Data with Background Subtraction')
+    plt.legend()
+
+    plt.figure()
+    plt.plot(common_wX_datetime, interp_wY, label='Original HNO3')
+    plt.plot(common_wX_datetime, background_interpolated_common_wX, label='Interpolated BG')
+    plt.xlabel('Time')
+    plt.ylabel('Signal')
+    plt.title('Original HNO3 Data and Interpolated Background')
+    plt.legend()
+
+    plt.figure()
+    plt.plot(common_wX_datetime, wDest_no_bg, label='Deconvolved HNO3 - BG')
+    plt.plot(common_wX_datetime, interp_wY_ict, color='red', label='CO')
+    plt.xlabel('Time')
+    plt.ylabel('Signal')
+    plt.title('Deconvolved HNO3 Data with Background Subtraction')
+    plt.legend()
+
+    plt.figure()
+    plt.plot(common_wX_datetime, wDest, label='Deconvolved HNO3')
+    plt.plot(common_wX_datetime, background_interpolated_common_wX, label='Interpolated BG')
+    plt.xlabel('Time')
+    plt.ylabel('Signal')
+    plt.title('Deconvolved HNO3 Data and Interpolated Background')
+    plt.legend()
+
+    plt.show()
 
 def main():
 
@@ -494,10 +561,10 @@ def main():
     Background = data['N2ZeroKey'].values
 
     # Calculate the background averages and times
-    background_averages, background_average_times = interpolate_background(Background, wY, wX)
+    background_averages, background_average_times = HV_interpolate_background(Background, wY, wX)
 
     # Subtract background from wY
-    wY_no_bg, background_values_interpolated = subtract_background(wY, wX, background_averages, background_average_times)
+    wY_no_bg, background_values_interpolated = HV_subtract_background(wY, wX, background_averages, background_average_times)
     
     # Load the ICT file data
     ict_data = pd.read_csv(directory+ict_file, skiprows=35)
@@ -507,30 +574,33 @@ def main():
     # Replace any CO values below 0 with NaN
     wY_ict[wY_ict < 0] = np.nan
 
-     # Get the common time and interpolated data
-    common_wX, interp_wY, interp_wY_ict = get_common_time_and_interpolated_data(wX, wY, wX_ict, wY_ict, date_str)
+    # Get the common time and interpolated data
+    common_wX, interp_wY, interp_wY_ict = HV_get_common_time_and_interpolated_data(wX, wY, wX_ict, wY_ict, date_str)
 
     # Subtract background from wY
-    wY_no_bg, background_values_interpolated = subtract_background(wY, wX, background_averages, background_average_times)
+    wY_no_bg, background_values_interpolated = HV_subtract_background(wY, wX, background_averages, background_average_times)
 
     # Now, 'background_values' is an array of the same size as 'background_indices'
     background_interpolated_common_wX = background_values_interpolated
 
     # Subtract the background from the original 'HNO3' data
-    interp_wY_no_bg, _ = subtract_background(interp_wY, common_wX, background_averages, background_average_times)
-
-    IRF_data = pd.read_csv(directory+IRF_filename)
-
+    interp_wY_no_bg, _ = HV_subtract_background(interp_wY, common_wX, background_averages, background_average_times)
+    
     # Set the parameters for deconvolution
     NIter = 5  # Replace with the desired value
     SmoothError = 0  # Replace with the desired value
+
+    # Fit the IRF before deconvolution
+    FitIRF(datafile, directory)
     
+    IRF_data = pd.read_csv(directory+IRF_filename)
+
     # Deconvolution for CSV data
     wDest = np.zeros_like(interp_wY)
     wDest = HV_Deconvolve(common_wX, interp_wY, wDest, IRF_data, SmoothError, NIter)
 
     # Subtract the background from the deconvolved 'HNO3' data
-    wDest_no_bg, _ = subtract_background(wDest, common_wX, background_averages, background_average_times)
+    wDest_no_bg, _ = HV_subtract_background(wDest, common_wX, background_averages, background_average_times)
 
     # Calculate the integrals
     integral_wY = trapz(wY,wX)
@@ -543,61 +613,12 @@ def main():
     total_runtime = end_time - start_time
     print("Total runtime: {:.1f} seconds".format(total_runtime))
 
-    # Display all plots
-
-    # TIME SERIES
-    # Original time series for CSV and ICT data, Main Figure
-    plt.figure(figsize=(10, 8))
-    plt.subplot(2, 1, 1)
-    plt.plot(common_wX, interp_wY, label='HNO3')
-    plt.plot(common_wX, interp_wY_ict, label=' CO')
-    plt.plot(common_wX, wDest, label='Deconvolved HNO3')
-    plt.xlabel('Time')
-    plt.ylabel('Signal')
-    plt.title('Original and Deconvolved Signal')
-    plt.legend()
-
-    # Deconvolved only
-    plt.subplot(2, 1, 2)
-    plt.plot(common_wX, wDest, label='Deconvolved HNO3',color='C1')
-    plt.xlabel('Time')
-    plt.ylabel('Signal')
-    plt.title('Deconvolved Signal Only')
-    plt.legend()
-    plt.tight_layout()
-
     # Convert the common_wX timestamps to datetime objects
     common_wX_datetime = [datetime.fromtimestamp(ts) for ts in common_wX]
-
-    # Plot original data with background subtracted
-    plt.figure()
-    plt.plot(common_wX_datetime, interp_wY_no_bg, label='Original HNO3 - BG')
-    plt.plot(common_wX_datetime, interp_wY_ict, color='red', label='CO')
-    plt.title('Original HNO3 Data with Background Subtraction')
-    plt.legend()
-
-    # Plot original data with background without subtracting it
-    plt.figure()
-    plt.plot(common_wX_datetime, interp_wY, label='Original HNO3')
-    plt.plot(common_wX_datetime, background_interpolated_common_wX, label='Interpolated BG')
-    plt.title('Original HNO3 Data and Interpolated Background')
-    plt.legend()
-
-    # Plot deconvolved data with background subtracted
-    plt.figure()
-    plt.plot(common_wX_datetime, wDest_no_bg, label='Deconvolved HNO3 - BG')
-    plt.plot(common_wX_datetime, interp_wY_ict, color='red', label='CO')
-    plt.title('Deconvolved HNO3 Data with Background Subtraction')
-    plt.legend()
-
-    # Plot deconvolved data with background (without subtracting it)
-    plt.figure()
-    plt.plot(common_wX_datetime, wDest, label='Deconvolved HNO3')
-    plt.plot(common_wX_datetime, background_interpolated_common_wX, label='Interpolated BG')
-    plt.title('Deconvolved HNO3 Data and Interpolated Background')
-    plt.legend()
-
-    plt.show()
+    
+    # Call the generate_figures function and pass the required arguments
+    HV_generate_figures(common_wX_datetime, interp_wY, interp_wY_ict, wDest, interp_wY_no_bg, wDest_no_bg,
+                     background_interpolated_common_wX, directory, date_str)
 
 if __name__ == "__main__":
      main()
