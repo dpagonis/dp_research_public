@@ -96,7 +96,7 @@ def igor_to_datetime(igor_timestamp):
     return base_datetime + timedelta_seconds
 
 def ict_to_datetime(ict_timestamp, measurement_date):
-    base_datetime = datetime.strptime(measurement_date, "%Y_%m_%d")
+    base_datetime = datetime.strptime(measurement_date, "%Y%m%d")
     return base_datetime + timedelta(seconds=int(ict_timestamp))
 
 def FitIRF(csv_filename, directory):
@@ -548,7 +548,7 @@ def main():
 
     # Load the data from the CSV file
     directory = 'C:/Users/hjver/Documents/dp_research_public/deconvolution/data/'
-    datafile = '2019_08_07_HNO3Data.csv'
+    datafile = '2020_10_23_HNO3Data.csv'
     ict_file = 'FIREXAQ-DACOM_DC8_20190807_R0.ict'
 
     base_str = datafile.rstrip('.csv')
@@ -566,6 +566,9 @@ def main():
     # Subtract background from wY
     wY_no_bg, background_values_interpolated = HV_subtract_background(wY, wX, background_averages, background_average_times)
     
+    # Parse date string form ICT file
+    date_str_ict = ict_file[18:26]
+
     # Load the ICT file data
     ict_data = pd.read_csv(directory+ict_file, skiprows=35)
     wX_ict = ict_data['Time_Start'].values  # Assuming 'Time_Start' is your time column
@@ -575,7 +578,7 @@ def main():
     wY_ict[wY_ict < 0] = np.nan
 
     # Get the common time and interpolated data
-    common_wX, interp_wY, interp_wY_ict = HV_get_common_time_and_interpolated_data(wX, wY, wX_ict, wY_ict, date_str)
+    common_wX, interp_wY, interp_wY_ict = HV_get_common_time_and_interpolated_data(wX, wY, wX_ict, wY_ict, date_str_ict)
 
     # Subtract background from wY
     wY_no_bg, background_values_interpolated = HV_subtract_background(wY, wX, background_averages, background_average_times)
