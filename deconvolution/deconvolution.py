@@ -445,10 +445,10 @@ def HV_interpolate_background(Background, wY, wX):
         
     return background_averages, background_average_times
 
-def HV_get_common_time_and_interpolated_data(wX, wY, wDest, wX_ict, wY_ict, background_indices, background_values, date_str):
+def HV_get_common_time_and_interpolated_data(wX, wY, wDest, wX_ict, wY_ict, wY_subtracted_bg, wDest_subtracted_bg, background_values_interpolated, date_str_ict):
     # Convert both time series to datetime
     wX_datetime = [igor_to_datetime(ts) for ts in wX]
-    wX_ict_datetime = [ict_to_datetime(ts, date_str) for ts in wX_ict]
+    wX_ict_datetime = [ict_to_datetime(ts, date_str_ict) for ts in wX_ict]
 
     # Convert datetime objects to timestamps
     wX_timestamp = [dt.timestamp() for dt in wX_datetime]
@@ -464,20 +464,25 @@ def HV_get_common_time_and_interpolated_data(wX, wY, wDest, wX_ict, wY_ict, back
     interp_wY = np.interp(common_wX, wX_timestamp, wY)
     interp_wY_ict = np.interp(common_wX, wX_ict_timestamp, wY_ict)
     interp_wDest = np.interp(common_wX, wX_timestamp, wDest)
-    interp_background_values = np.interp(common_wX, background_indices, background_values)
+    interp_background_values = np.interp(common_wX, wX_timestamp, background_values_interpolated)
+    interp_wY_subtracted_bg = np.interp(common_wX, wX_timestamp, wY_subtracted_bg )
+    interp_wDest_subtracted_bg = np.interp(common_wX, wX_timestamp, wDest_subtracted_bg)
 
-    return common_wX, interp_wY, interp_wY_ict, interp_wDest, interp_background_values
+    return common_wX, interp_wY, interp_wY_ict, interp_wDest, interp_background_values, interp_wY_subtracted_bg, interp_wDest_subtracted_bg
 
-def HV_subtract_background(data, time, background_averages, background_average_times):
+def HV_subtract_background(wY, wDest, wX, background_averages, background_average_times):
     # Interpolate the background averages over the entire dataset
-    background_values_interpolated = np.interp(time, background_average_times, background_averages)
+    background_values_interpolated = np.interp(wX, background_average_times, background_averages)
 
     # Subtract the background from the original data
-    data_no_bg = data - background_values_interpolated
+    wY_subtracted_bg = wY - background_values_interpolated
 
-    return data_no_bg, background_values_interpolated
+    # Subtract the background from the deconvolved data
+    wDest_subtracted_bg = wDest - background_values_interpolated
 
-def HV_generate_figures(common_wX_datetime, interp_wY, interp_wY_ict, interp_wDest, interp_wY_no_bg, wDest_no_bg, interp_background_values, directory, date_str):
+    return wY_subtracted_bg, wDest_subtracted_bg, background_values_interpolated
+
+def HV_generate_figures(common_wX_datetime, interp_wY, interp_wY_ict, interp_wDest, interp_wY_subtracted_bg, interp_wDest_subtracted_bg, interp_background_values, directory, date_str):
     # FitIRF plots
     FitIRF_plots = plt.imread(directory + f'{date_str}_InstrumentResponseFunction.png')
     plt.figure(figsize=(10, 8))
@@ -511,8 +516,9 @@ def HV_generate_figures(common_wX_datetime, interp_wY, interp_wY_ict, interp_wDe
     # Apply the formatter to the x-axis
     plt.gca().xaxis.set_major_formatter(time_formatter)
 
+    # ISSUE W/ wY_SUBTRACTED_BG
     plt.figure()
-    plt.plot(common_wX_datetime, interp_wY_no_bg, label='Original HNO3 - BG')
+    plt.plot(common_wX_datetime, interp_wY_subtracted_bg, label='Original HNO3 - BG')
     plt.plot(common_wX_datetime, interp_wY_ict, color='red', label='CO')
     plt.xlabel('Time')
     plt.ylabel('Signal')
@@ -527,8 +533,9 @@ def HV_generate_figures(common_wX_datetime, interp_wY, interp_wY_ict, interp_wDe
     plt.title('Original HNO3 Data and Interpolated Background')
     plt.legend()
 
+    # ISSUE W/ wDEST SUBTRACTED BG
     plt.figure()
-    plt.plot(common_wX_datetime, wDest_no_bg, label='Deconvolved HNO3 - BG')
+    plt.plot(common_wX_datetime, interp_wDest_subtracted_bg, label='Deconvolved HNO3 - BG')
     plt.plot(common_wX_datetime, interp_wY_ict, color='red', label='CO')
     plt.xlabel('Time')
     plt.ylabel('Signal')
@@ -550,7 +557,7 @@ def main():
     start_time=time.time()
 
     # Load the data from the CSV file "D:/2019_07_22_HNO3Data.csv"
-    directory = 'C:/Users/hjver/Documents/dp_research_public/deconvolution/data/USB Drive/'
+    directory = 'C:/Users/hjver/Documents/dp_research_public/deconvolution/data/'
     datafile = '2019_08_07_HNO3Data1.csv'
     ict_file = 'FIREXAQ-DACOM_DC8_20190807_R1.ict'
 
@@ -576,9 +583,6 @@ def main():
     wDest = np.zeros_like(wY)
     wDest = HV_Deconvolve(wX, wY, wDest, IRF_data, SmoothError, NIter)
 
-    print(len(wY), len(wX))
-    print(len(wDest), len(wX))
-
     # Calculate the integrals
     integral_wY = trapz(wY,wX)
     integral_wDest = trapz(wDest,wX)
@@ -599,28 +603,22 @@ def main():
     # Calculate the background averages and times
     background_averages, background_average_times = HV_interpolate_background(Background, wY, wX)
 
-    # Subtract background from wY
-    wY_no_bg, background_values_interpolated = HV_subtract_background(wY, wX, background_averages, background_average_times)
+    # Subtract BG from original and deconvolved data
+    wY_subtracted_bg, wDest_subtracted_bg, background_values_interpolated = HV_subtract_background(wY, wDest, wX, background_averages, background_average_times)
 
     # Get the common time and interpolated data
-    common_wX, interp_wY, interp_wY_ict, interp_wDest, interp_background_values  = HV_get_common_time_and_interpolated_data(wX, wY, wDest, wX_ict, wY_ict, wX, background_values_interpolated, date_str_ict)
-
-    # Subtract the background from the original 'HNO3' data
-    interp_wY_no_bg, _ = HV_subtract_background(interp_wY, common_wX, background_averages, background_average_times)
-
-    # Subtract the background from the deconvolved 'HNO3' data
-    wDest_no_bg, _ = HV_subtract_background(interp_wDest, common_wX, background_averages, background_average_times)
-
+    common_wX, interp_wY, interp_wY_ict, interp_wDest, interp_background_values, interp_wY_subtracted_bg, interp_wDest_subtracted_bg  = HV_get_common_time_and_interpolated_data(wX, wY, wDest, wX_ict, wY_ict, wY_subtracted_bg, wDest_subtracted_bg, background_values_interpolated, date_str_ict)
+    
+    # Convert the common_wX timestamps to datetime objects
+    common_wX_datetime = [datetime.fromtimestamp(ts) for ts in common_wX]
+    
     # Calculate the total runtime
     end_time = time.time()
     total_runtime = end_time - start_time
     print("Total runtime: {:.1f} seconds".format(total_runtime))
 
-    # Convert the common_wX timestamps to datetime objects
-    common_wX_datetime = [datetime.fromtimestamp(ts) for ts in common_wX]
-    
     # Call the generate_figures function and pass the required arguments
-    HV_generate_figures(common_wX_datetime, interp_wY, interp_wY_ict, interp_wDest, interp_wY_no_bg, wDest_no_bg, interp_background_values, directory, date_str)
+    HV_generate_figures(common_wX_datetime, interp_wY, interp_wY_ict, interp_wDest, interp_wY_subtracted_bg, interp_wDest_subtracted_bg, interp_background_values, directory, date_str)
 
 if __name__ == "__main__":
      main()
