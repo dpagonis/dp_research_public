@@ -141,7 +141,7 @@ def FitIRF(csv_filename, directory):
         x_subset_datetime = x_values_datetime[start_index:end_index]
         y_subset = y_values[start_index:end_index]
 
-        # Code for datasets w/o pre-normalized HNO3_190 and HNO3_191
+        # Code for datasets w/o pre-normalized data
         # Get the corresponding subset of column values from the data
         # column_subset = data.loc[start_index:end_index - 1, ['I_127_Hz', 'IH20_145_Hz']]
         # Modify the data points
@@ -183,6 +183,7 @@ def FitIRF(csv_filename, directory):
                    f"A2: {1-fitted_params[0]:.4f}\n" \
                    f"tau2: {fitted_params[2]:.4f}"
         ax.text(0.3, 0.5, fit_info, transform=ax.transAxes, bbox=dict(facecolor='white', edgecolor='gray'))
+        
         # Create a DateFormatter for the time only
         time_formatter = mdates.DateFormatter('%H:%M:%S')
 
@@ -290,7 +291,7 @@ def Deconvolve_DblExp(wX, wY, wDest, Tau1, A1, Tau2, A2, NIter, SmoothError):
     
     return wDest
 
-def HV_Deconvolve(wX, wY, wDest, IRF_data, SmoothError, NIter):
+def HV_Deconvolve(wX, wY, wDest, IRF_data, SmoothError, NIter, datafile, directory):
     
     # Delete existing iteration_ii.png debugging files
     existing_files = glob.glob("debugplots/iteration_*.png")
@@ -348,6 +349,15 @@ def HV_Deconvolve(wX, wY, wDest, IRF_data, SmoothError, NIter):
     
     #downsample 
     wDest = resample(wDest_upsampled, len(wX))
+
+    # Extracting date from input CSV filename
+    date_str = datafile[:10]
+
+    # Save to CSV
+    output_df = pd.DataFrame({'time': wX, 'HNO3_190_Hz': wDest})
+
+    output_filename = f"{directory}{date_str}_Deconvolved_HNO3Data.csv"
+    output_df.to_csv(output_filename, index=False)
 
     return wDest
 
@@ -491,7 +501,7 @@ def HV_generate_figures(common_wX_datetime, interp_wY, interp_wY_ict, interp_wDe
     plt.title('FitIRF Plots')
     plt.tight_layout()
 
-    # TIME SERIES
+    # Original, Deconvolved Data & ICARTT Data Time Series
     plt.figure(figsize=(10, 8))
     plt.subplot(2, 1, 1)
     plt.plot(common_wX_datetime, interp_wY, label='HNO3')
@@ -516,7 +526,7 @@ def HV_generate_figures(common_wX_datetime, interp_wY, interp_wY_ict, interp_wDe
     # Apply the formatter to the x-axis
     plt.gca().xaxis.set_major_formatter(time_formatter)
 
-    # ISSUE W/ wY_SUBTRACTED_BG
+    # Original Data with BG Subtracted
     plt.figure()
     plt.plot(common_wX_datetime, interp_wY_subtracted_bg, label='Original HNO3 - BG')
     plt.plot(common_wX_datetime, interp_wY_ict, color='red', label='CO')
@@ -525,6 +535,7 @@ def HV_generate_figures(common_wX_datetime, interp_wY, interp_wY_ict, interp_wDe
     plt.title('Original HNO3 Data with Background Subtraction')
     plt.legend()
 
+    # Original Data & Interpolated BG
     plt.figure()
     plt.plot(common_wX_datetime, interp_wY, label='Original HNO3')
     plt.plot(common_wX_datetime, interp_background_values, label='Interpolated BG')
@@ -533,7 +544,7 @@ def HV_generate_figures(common_wX_datetime, interp_wY, interp_wY_ict, interp_wDe
     plt.title('Original HNO3 Data and Interpolated Background')
     plt.legend()
 
-    # ISSUE W/ wDEST SUBTRACTED BG
+    # Deconvolved Data with BG Subtracted
     plt.figure()
     plt.plot(common_wX_datetime, interp_wDest_subtracted_bg, label='Deconvolved HNO3 - BG')
     plt.plot(common_wX_datetime, interp_wY_ict, color='red', label='CO')
@@ -542,6 +553,7 @@ def HV_generate_figures(common_wX_datetime, interp_wY, interp_wY_ict, interp_wDe
     plt.title('Deconvolved HNO3 Data with Background Subtraction')
     plt.legend()
 
+    # Deconvolved Data & Interpolated BG
     plt.figure()
     plt.plot(common_wX_datetime, interp_wDest, label='Deconvolved HNO3')
     plt.plot(common_wX_datetime, interp_background_values, label='Interpolated BG')
@@ -549,6 +561,22 @@ def HV_generate_figures(common_wX_datetime, interp_wY, interp_wY_ict, interp_wDe
     plt.ylabel('Signal')
     plt.title('Deconvolved HNO3 Data and Interpolated Background')
     plt.legend()
+
+    # Original data correlation plot
+    plt.figure(figsize=(6, 4))
+    plt.scatter(interp_wY_ict, interp_wY, marker='.', color='b')
+    plt.xlabel('CO')
+    plt.ylabel('HNO3')
+    plt.title('Original Data Correlation Plot')
+    plt.tight_layout()
+    
+    # Deconvolved data correlation plot
+    plt.figure(figsize=(6, 4))
+    plt.scatter(interp_wY_ict, interp_wDest, marker='.', color='b')
+    plt.xlabel('CO')
+    plt.ylabel('Deconvolved HNO3')
+    plt.title('Deconvolved Data Correlation Plot')
+    plt.tight_layout()
 
     plt.show()
 
@@ -558,7 +586,7 @@ def main():
 
     # Load the data from the CSV file "D:/2019_07_22_HNO3Data.csv"
     directory = 'C:/Users/hjver/Documents/dp_research_public/deconvolution/data/'
-    datafile = '2019_08_07_HNO3Data1.csv'
+    datafile = '2019_08_07_HNO3Data.csv'
     ict_file = 'FIREXAQ-DACOM_DC8_20190807_R1.ict'
 
     base_str = datafile.rstrip('.csv')
@@ -566,6 +594,10 @@ def main():
     IRF_filename = f'{date_str}_InstrumentResponseFunction.csv'
 
     data = pd.read_csv(directory+datafile)
+
+    # Drop rows where 'HNO3_190_Hz' or 'HNO3_191_Hz' has NaN values
+    data = data.dropna(subset=['HNO3_190_Hz', 'HNO3_191_Hz'])
+
     wX = data['time'].values
     wY = data['HNO3_190_Hz'].values
     Background = data['ZeroKey'].values
@@ -581,7 +613,7 @@ def main():
 
     # Deconvolution for CSV data
     wDest = np.zeros_like(wY)
-    wDest = HV_Deconvolve(wX, wY, wDest, IRF_data, SmoothError, NIter)
+    wDest = HV_Deconvolve(wX, wY, wDest, IRF_data, SmoothError, NIter, datafile, directory)
 
     # Calculate the integrals
     integral_wY = trapz(wY,wX)
