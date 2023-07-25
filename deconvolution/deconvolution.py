@@ -187,7 +187,7 @@ def FitIRF(csv_filename, directory):
     save_dir = 'C:/Users/hjver/Documents/dp_research_public/deconvolution/data/Figures/'
 
     # Define the directory for CSV files
-    csv_dir = 'C:/Users/hjver/Documents/dp_research_public/deconvolution/data/'
+    csv_dir = 'C:/Users/hjver/Documents/dp_research_public/deconvolution/data/Output Data'
 
     # Adjust the spacing between subplots
     plt.tight_layout()
@@ -198,7 +198,7 @@ def FitIRF(csv_filename, directory):
     # Save the fit information as a CSV file with the extracted date in the CSV directory
     filename = f'{date_str}_InstrumentResponseFunction.csv'
     fit_info_df = pd.DataFrame(fit_info_list)
-    fit_info_df.to_csv(csv_dir + filename, index=False, header=False)
+    fit_info_df.to_csv(os.path.join(csv_dir, filename), index=False, header=False)
 
 def Deconvolve_DblExp(wX, wY, wDest, Tau1, A1, Tau2, A2, NIter, SmoothError):
     # Deconvolution algorithm for DOUBLE EXPONENTIAL instrument function
@@ -282,6 +282,9 @@ def Deconvolve_DblExp(wX, wY, wDest, Tau1, A1, Tau2, A2, NIter, SmoothError):
     return wDest
 
 def HV_Deconvolve(wX, wY, wDest, IRF_data, SmoothError, NIter, datafile, directory):
+
+    # Path for saving CSV file
+    output_data_dir = 'C:/Users/hjver/Documents/dp_research_public/deconvolution/data/Output Data/'
     
     # Delete existing iteration_ii.png debugging files
     existing_files = glob.glob("debugplots/iteration_*.png")
@@ -343,10 +346,13 @@ def HV_Deconvolve(wX, wY, wDest, IRF_data, SmoothError, NIter, datafile, directo
     # Extracting date from input CSV filename
     date_str = datafile[:10]
 
+    # Define the output directory for deconvolved data
+    output_data_dir = 'C:/Users/hjver/Documents/dp_research_public/deconvolution/data/Output Data/'
+
     # Save to CSV
     output_df = pd.DataFrame({'time': wX, 'HNO3_190_Hz': wDest})
 
-    output_filename = f"{directory}{date_str}_Deconvolved_HNO3Data.csv"
+    output_filename = f"{output_data_dir}{date_str}_Deconvolved_HNO3Data.csv"
     output_df.to_csv(output_filename, index=False)
 
     return wDest
@@ -591,7 +597,10 @@ def HV_ProcessFlights(directory, datafile, ict_file, NIter, SmoothError):
 
     base_str = datafile.rstrip('.csv')
     date_str = datafile[:10]
-    IRF_filename = f'{date_str}_InstrumentResponseFunction.csv'
+
+    # Create output directory path
+    output_directory = os.path.join(directory, 'Output Data')
+    IRF_filename = os.path.join(output_directory, f'{date_str}_InstrumentResponseFunction.csv')
 
     data = pd.read_csv(directory+datafile)
 
@@ -605,7 +614,7 @@ def HV_ProcessFlights(directory, datafile, ict_file, NIter, SmoothError):
     # Fit the IRF before deconvolution
     FitIRF(datafile, directory)
     
-    IRF_data = pd.read_csv(directory+IRF_filename)
+    IRF_data = pd.read_csv(IRF_filename)
 
     # Deconvolution for CSV data
     wDest = np.zeros_like(wY)
@@ -652,7 +661,17 @@ if __name__ == "__main__":
     
     # Load data from csv and ict files
     directory = 'C:/Users/hjver/Documents/dp_research_public/deconvolution/data/'
-    datafiles = ['2019_07_22_HNO3Data.csv', '2019_07_24_HNO3Data.csv']
+    datafiles = ['2019_07_22_HNO3Data.csv', '2019_07_24_HNO3Data.csv', 
+                 '2019_07_25_HNO3Data.csv', '2019_07_29_HNO3Data.csv', 
+                 '2019_07_30_HNO3Data.csv','2019_08_02_HNO3Data.csv', 
+                 '2019_08_03_HNO3Data.csv','2019_08_06_HNO3Data.csv', 
+                 '2019_08_07_HNO3Data.csv', '2019_08_08_HNO3Data.csv', 
+                 '2019_08_12_HNO3Data.csv', '2019_08_13_HNO3Data.csv', 
+                 '2019_08_15_HNO3Data.csv', '2019_08_16_HNO3Data.csv', 
+                 '2019_08_21_HNO3Data.csv', '2019_08_23_HNO3Data.csv', 
+                 '2019_08_26_HNO3Data.csv', '2019_08_29_HNO3Data.csv', 
+                 '2019_08_30_HNO3Data.csv', '2019_08_31_HNO3Data.csv',
+                 '2019_09_03_HNO3Data.csv', '2019_09_05_HNO3Data.csv']
 
     # Assuming iterations and smooth error are the same for all flights, if not you can adjust
     iterations = 5
