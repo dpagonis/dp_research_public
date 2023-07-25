@@ -165,16 +165,6 @@ def FitIRF(csv_filename, directory):
         ax.set_ylabel('Signal (ncps)')
         ax.set_title(f'Cal {i + 1}')
 
-        # Add the fit information to the plot. currently redundant with the fit info box below
-        # num_params = len(fitted_params)
-        # if num_params == 3:
-        #     fit_info = f'A1={fitted_params[0]:.2f}, T1={fitted_params[1]:.2f}, A2={1-fitted_params[0]:.2f}, T2={fitted_params[2]:.2f}'
-        # elif num_params == 4:
-        #     fit_info = f'A1={fitted_params[0]:.2f}, T1={fitted_params[1]:.2f}, A2={fitted_params[2]:.2f}, T2={fitted_params[3]:.2f}'
-        # else:
-        #     fit_info = 'Unknown fit information'
-        # ax.text(0.05, 0.9, fit_info, transform=ax.transAxes)
-
         # Add a legend to the plot
         ax.legend()
         # Display fit information
@@ -193,22 +183,22 @@ def FitIRF(csv_filename, directory):
         fit_info_list.append([x_subset_numeric[0], fitted_params[0], fitted_params[1], 1 - fitted_params[0],
                               fitted_params[2]])
 
+    # Define the save directory for figures
+    save_dir = 'C:/Users/hjver/Documents/dp_research_public/deconvolution/data/Figures/'
+
+    # Define the directory for CSV files
+    csv_dir = 'C:/Users/hjver/Documents/dp_research_public/deconvolution/data/'
+
     # Adjust the spacing between subplots
     plt.tight_layout()
 
-    # Save the figure as a PNG file
-    plt.savefig(directory + f'{date_str}_InstrumentResponseFunction.png')
+    # Save the figure as a PNG file in the desired directory
+    plt.savefig(save_dir + f'{date_str}_InstrumentResponseFunction.png')
 
-    # Close the figure
-    plt.close()
-
-    # Save the fit information as a CSV file with the extracted date
+    # Save the fit information as a CSV file with the extracted date in the CSV directory
     filename = f'{date_str}_InstrumentResponseFunction.csv'
     fit_info_df = pd.DataFrame(fit_info_list)
-    fit_info_df.to_csv(directory + filename, index=False, header=False)
-
-    # Display all the subplots in the same window
-    plt.show()
+    fit_info_df.to_csv(csv_dir + filename, index=False, header=False)
 
 def Deconvolve_DblExp(wX, wY, wDest, Tau1, A1, Tau2, A2, NIter, SmoothError):
     # Deconvolution algorithm for DOUBLE EXPONENTIAL instrument function
@@ -432,6 +422,13 @@ def HV_interpolate_background(Background, wY, wX):
     if Background[-1] == 1:
         bg_end_indices = np.append(bg_end_indices, len(Background) - 1)
 
+    if len(bg_start_indices) > len(bg_end_indices):
+        # Remove the unmatched start indices
+        bg_start_indices = bg_start_indices[:len(bg_end_indices)]
+    elif len(bg_end_indices) > len(bg_start_indices):
+        # Remove the unmatched end indices
+        bg_end_indices = bg_end_indices[:len(bg_start_indices)]
+
     # Verify that there are equal numbers of start and end indices
     assert len(bg_start_indices) == len(bg_end_indices), "Number of start and end indices for background measurements do not match"
 
@@ -493,13 +490,9 @@ def HV_subtract_background(wY, wDest, wX, background_averages, background_averag
     return wY_subtracted_bg, wDest_subtracted_bg, background_values_interpolated
 
 def HV_generate_figures(common_wX_datetime, interp_wY, interp_wY_ict, interp_wDest, interp_wY_subtracted_bg, interp_wDest_subtracted_bg, interp_background_values, directory, date_str):
-    # FitIRF plots
-    FitIRF_plots = plt.imread(directory + f'{date_str}_InstrumentResponseFunction.png')
-    plt.figure(figsize=(10, 8))
-    plt.imshow(FitIRF_plots)
-    plt.axis('off')
-    plt.title('FitIRF Plots')
-    plt.tight_layout()
+    
+    # Directory to save figures
+    save_dir = directory + "Figures/"
 
     # Original, Deconvolved Data & ICARTT Data Time Series
     plt.figure(figsize=(10, 8))
@@ -511,6 +504,7 @@ def HV_generate_figures(common_wX_datetime, interp_wY, interp_wY_ict, interp_wDe
     plt.ylabel('Signal')
     plt.title('Original and Deconvolved Signal')
     plt.legend()
+    plt.savefig(save_dir + f"{date_str}_Original_and_Deconvolved_Signal.png")
 
     plt.subplot(2, 1, 2)
     plt.plot(common_wX_datetime, interp_wDest, label='Deconvolved HNO3', color='C1')
@@ -519,6 +513,7 @@ def HV_generate_figures(common_wX_datetime, interp_wY, interp_wY_ict, interp_wDe
     plt.title('Deconvolved Signal Only')
     plt.legend()
     plt.tight_layout()
+    plt.savefig(save_dir + f"{date_str}_Deconvolved_Signa_Only.png")
 
     # Configure x-axis tick formatter as datetime
     time_formatter = mdates.DateFormatter('%Y-%m-%d %H:%M:%S')
@@ -534,6 +529,7 @@ def HV_generate_figures(common_wX_datetime, interp_wY, interp_wY_ict, interp_wDe
     plt.ylabel('Signal')
     plt.title('Original HNO3 Data with Background Subtraction')
     plt.legend()
+    plt.savefig(save_dir + f"{date_str}_Original_HNO3_with_Background_Subtraction.png")
 
     # Original Data & Interpolated BG
     plt.figure()
@@ -543,6 +539,7 @@ def HV_generate_figures(common_wX_datetime, interp_wY, interp_wY_ict, interp_wDe
     plt.ylabel('Signal')
     plt.title('Original HNO3 Data and Interpolated Background')
     plt.legend()
+    plt.savefig(save_dir + f"{date_str}_Original_HNO3_Data_and_Interpolated_Background.png")
 
     # Deconvolved Data with BG Subtracted
     plt.figure()
@@ -552,6 +549,7 @@ def HV_generate_figures(common_wX_datetime, interp_wY, interp_wY_ict, interp_wDe
     plt.ylabel('Signal')
     plt.title('Deconvolved HNO3 Data with Background Subtraction')
     plt.legend()
+    plt.savefig(save_dir + f"{date_str}_Deconvolved_HNO3_Data_with_Background_Subtraction.png")
 
     # Deconvolved Data & Interpolated BG
     plt.figure()
@@ -561,6 +559,7 @@ def HV_generate_figures(common_wX_datetime, interp_wY, interp_wY_ict, interp_wDe
     plt.ylabel('Signal')
     plt.title('Deconvolved HNO3 Data and Interpolated Background')
     plt.legend()
+    plt.savefig(save_dir + f"{date_str}_Deconvolved_HNO3_Data_and_Interpolated_Background.png")
 
     # Original data correlation plot
     plt.figure(figsize=(6, 4))
@@ -569,7 +568,8 @@ def HV_generate_figures(common_wX_datetime, interp_wY, interp_wY_ict, interp_wDe
     plt.ylabel('HNO3')
     plt.title('Original Data Correlation Plot')
     plt.tight_layout()
-    
+    plt.savefig(save_dir + f"{date_str}_Original_Data_Correlation_Plot.png")
+
     # Deconvolved data correlation plot
     plt.figure(figsize=(6, 4))
     plt.scatter(interp_wY_ict, interp_wDest, marker='.', color='b')
@@ -577,17 +577,17 @@ def HV_generate_figures(common_wX_datetime, interp_wY, interp_wY_ict, interp_wDe
     plt.ylabel('Deconvolved HNO3')
     plt.title('Deconvolved Data Correlation Plot')
     plt.tight_layout()
+    plt.savefig(save_dir + f"{date_str}_Deconvolved_Data_Correlation_Plot.png")
 
-    plt.show()
+def Get_ICT_Filename(csv_filename):
+    date_str = csv_filename[:10]
+    ict_date = date_str.replace("_", "")
+    ict_filename = f"FIREXAQ-DACOM_DC8_{ict_date}_R1.ict"
+    return ict_filename
 
-def main():
+def HV_ProcessFlights(directory, datafile, ict_file, NIter, SmoothError):
 
     start_time=time.time()
-
-    # Load the data from the CSV file "D:/2019_07_22_HNO3Data.csv"
-    directory = 'C:/Users/hjver/Documents/dp_research_public/deconvolution/data/'
-    datafile = '2019_08_07_HNO3Data.csv'
-    ict_file = 'FIREXAQ-DACOM_DC8_20190807_R1.ict'
 
     base_str = datafile.rstrip('.csv')
     date_str = datafile[:10]
@@ -601,10 +601,6 @@ def main():
     wX = data['time'].values
     wY = data['HNO3_190_Hz'].values
     Background = data['ZeroKey'].values
-
-    # Set the parameters for deconvolution
-    NIter = 5  # Replace with the desired value
-    SmoothError = 0  # Replace with the desired value
 
     # Fit the IRF before deconvolution
     FitIRF(datafile, directory)
@@ -653,4 +649,16 @@ def main():
     HV_generate_figures(common_wX_datetime, interp_wY, interp_wY_ict, interp_wDest, interp_wY_subtracted_bg, interp_wDest_subtracted_bg, interp_background_values, directory, date_str)
 
 if __name__ == "__main__":
-     main()
+    
+    # Load data from csv and ict files
+    directory = 'C:/Users/hjver/Documents/dp_research_public/deconvolution/data/'
+    datafiles = ['2019_07_22_HNO3Data.csv', '2019_07_24_HNO3Data.csv']
+
+    # Assuming iterations and smooth error are the same for all flights, if not you can adjust
+    iterations = 5
+    smooth_err = 0
+
+    for datafile in datafiles:
+        ict_file = Get_ICT_Filename(datafile)
+        print(f"Processing {datafile}...")
+        HV_ProcessFlights(directory, datafile, ict_file, iterations, smooth_err)
