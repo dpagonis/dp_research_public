@@ -4,13 +4,14 @@ import matplotlib.dates as mdates
 from scipy.optimize import curve_fit
 from scipy.signal import resample
 import pandas as pd
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, time
+import time as time_module
 import glob
 import os
-import time
 from scipy.integrate import trapz
 from scipy import interpolate
 from numba import njit, prange
+from scipy.stats import linregress
 
 
 def AdjGuess(wG, wE, NSmooth):
@@ -99,7 +100,7 @@ def igor_to_datetime(igor_timestamp):
 def ict_to_datetime(ict_timestamp, measurement_date):
     base_datetime = datetime.strptime(measurement_date, "%Y%m%d")
     return base_datetime + timedelta(seconds=int(ict_timestamp))
-   
+
 def FitIRF(csv_filename, directory):
     # Load the data from the CSV file
     data = pd.read_csv(directory+csv_filename)
@@ -194,6 +195,7 @@ def FitIRF(csv_filename, directory):
 
     # Save the figure as a PNG file in the desired directory
     plt.savefig(save_dir + f'{date_str}_InstrumentResponseFunction.png')
+    plt.close()
 
     # Save the fit information as a CSV file with the extracted date in the CSV directory
     filename = f'{date_str}_InstrumentResponseFunction.csv'
@@ -510,8 +512,7 @@ def HV_generate_figures(common_wX_datetime, interp_wY, interp_wY_ict, interp_wDe
     plt.ylabel('Signal')
     plt.title('Original and Deconvolved Signal')
     plt.legend()
-    plt.savefig(save_dir + f"{date_str}_Original_and_Deconvolved_Signal.png")
-
+    # plt.savefig(save_dir + f"{date_str}_Original_and_Deconvolved_Signal.png")
     plt.subplot(2, 1, 2)
     plt.plot(common_wX_datetime, interp_wDest, label='Deconvolved HNO3', color='C1')
     plt.xlabel('Time')
@@ -519,7 +520,8 @@ def HV_generate_figures(common_wX_datetime, interp_wY, interp_wY_ict, interp_wDe
     plt.title('Deconvolved Signal Only')
     plt.legend()
     plt.tight_layout()
-    plt.savefig(save_dir + f"{date_str}_Deconvolved_Signa_Only.png")
+    # plt.savefig(save_dir + f"{date_str}_Deconvolved_Signal_Only.png")
+    plt.close()
 
     # Configure x-axis tick formatter as datetime
     time_formatter = mdates.DateFormatter('%Y-%m-%d %H:%M:%S')
@@ -535,7 +537,8 @@ def HV_generate_figures(common_wX_datetime, interp_wY, interp_wY_ict, interp_wDe
     plt.ylabel('Signal')
     plt.title('Original HNO3 Data with Background Subtraction')
     plt.legend()
-    plt.savefig(save_dir + f"{date_str}_Original_HNO3_with_Background_Subtraction.png")
+    # plt.savefig(save_dir + f"{date_str}_Original_HNO3_with_Background_Subtraction.png")
+    plt.close()
 
     # Original Data & Interpolated BG
     plt.figure()
@@ -545,7 +548,8 @@ def HV_generate_figures(common_wX_datetime, interp_wY, interp_wY_ict, interp_wDe
     plt.ylabel('Signal')
     plt.title('Original HNO3 Data and Interpolated Background')
     plt.legend()
-    plt.savefig(save_dir + f"{date_str}_Original_HNO3_Data_and_Interpolated_Background.png")
+    # plt.savefig(save_dir + f"{date_str}_Original_HNO3_Data_and_Interpolated_Background.png")
+    plt.close()
 
     # Deconvolved Data with BG Subtracted
     plt.figure()
@@ -555,7 +559,8 @@ def HV_generate_figures(common_wX_datetime, interp_wY, interp_wY_ict, interp_wDe
     plt.ylabel('Signal')
     plt.title('Deconvolved HNO3 Data with Background Subtraction')
     plt.legend()
-    plt.savefig(save_dir + f"{date_str}_Deconvolved_HNO3_Data_with_Background_Subtraction.png")
+    # plt.savefig(save_dir + f"{date_str}_Deconvolved_HNO3_Data_with_Background_Subtraction.png")
+    plt.close()
 
     # Deconvolved Data & Interpolated BG
     plt.figure()
@@ -565,25 +570,72 @@ def HV_generate_figures(common_wX_datetime, interp_wY, interp_wY_ict, interp_wDe
     plt.ylabel('Signal')
     plt.title('Deconvolved HNO3 Data and Interpolated Background')
     plt.legend()
-    plt.savefig(save_dir + f"{date_str}_Deconvolved_HNO3_Data_and_Interpolated_Background.png")
+    # plt.savefig(save_dir + f"{date_str}_Deconvolved_HNO3_Data_and_Interpolated_Background.png")
+    plt.close()
+
+    # Convert all items to datetime, if not already
+    for i, item in enumerate(common_wX_datetime):
+        if not isinstance(item, datetime):
+            # Assuming they're timestamps if not datetime objects
+            common_wX_datetime[i] = datetime.fromtimestamp(item)
+
+
+    # Define the time interval 1:00am - 2:30am
+    start_time = time(1, 0)  # 1:00am
+    end_time = time(2, 30)  # 2:30am
+
+    # Filter based on the time
+    time_mask = [(t.time() >= start_time) and (t.time() <= end_time) for t in common_wX_datetime]
+
+    # Filter data where CO < 300
+    CO_mask = np.array(interp_wY_ict) >= 300
+
+    # Combine the masks (i.e., time & CO filter)
+    combined_mask = [a and b for a, b in zip(time_mask, CO_mask)]
+
+    # Apply the combined mask
+    filtered_wY = np.array(interp_wY)[combined_mask]
+    filtered_wY_ict = np.array(interp_wY_ict)[combined_mask]
+    filtered_wDest = np.array(interp_wDest)[combined_mask]
 
     # Original data correlation plot
     plt.figure(figsize=(6, 4))
-    plt.scatter(interp_wY_ict, interp_wY, marker='.', color='b')
+    slope, intercept, r_value, _, _ = linregress(filtered_wY_ict, filtered_wY)
+    plt.scatter(filtered_wY_ict, filtered_wY, marker='.', color='b')
+    plt.plot(filtered_wY_ict, intercept + slope*filtered_wY_ict, 'r', label=f'y={slope:.2f}x+{intercept:.2f}, $R^2$={r_value**2:.2f}')
     plt.xlabel('CO')
     plt.ylabel('HNO3')
     plt.title('Original Data Correlation Plot')
+    plt.legend(loc='upper left')
     plt.tight_layout()
-    plt.savefig(save_dir + f"{date_str}_Original_Data_Correlation_Plot.png")
+    # plt.savefig(save_dir + f"{date_str}_Original_Data_Correlation_Plot.png")
+    plt.close()
 
     # Deconvolved data correlation plot
     plt.figure(figsize=(6, 4))
-    plt.scatter(interp_wY_ict, interp_wDest, marker='.', color='b')
+    slope, intercept, r_value, _, _ = linregress(filtered_wY_ict, filtered_wDest)
+    plt.scatter(filtered_wY_ict, filtered_wDest, marker='.', color='b')
+    plt.plot(filtered_wY_ict, intercept + slope*filtered_wY_ict, 'r', label=f'y={slope:.2f}x+{intercept:.2f}, $R^2$={r_value**2:.2f}')
     plt.xlabel('CO')
     plt.ylabel('Deconvolved HNO3')
     plt.title('Deconvolved Data Correlation Plot')
+    plt.legend(loc='upper left')
     plt.tight_layout()
-    plt.savefig(save_dir + f"{date_str}_Deconvolved_Data_Correlation_Plot.png")
+    # plt.savefig(save_dir + f"{date_str}_Deconvolved_Data_Correlation_Plot.png")
+    plt.close()
+
+
+    # Step Function
+    plt.figure(figsize=(10, 8))
+    plt.step(common_wX_datetime, interp_wDest, where='post', label='Deconvolved HNO3', color='blue')
+    plt.step(common_wX_datetime, interp_wY, where='post', label='HNO3', color='green')
+    plt.step(common_wX_datetime, interp_wY_ict, where='post', label='CO', color='red')
+    plt.xlabel('Time')
+    plt.ylabel('Signal')
+    plt.title('2019_08_21 Step Function')
+    plt.legend()
+    # plt.savefig(save_dir + f"{date_str}_Interpolated_Start_Stop_Data.png")
+    plt.close()
 
 def Get_ICT_Filename(csv_filename):
     date_str = csv_filename[:10]
@@ -593,7 +645,7 @@ def Get_ICT_Filename(csv_filename):
 
 def HV_ProcessFlights(directory, datafile, ict_file, NIter, SmoothError):
 
-    start_time=time.time()
+    start_time=time_module.time()
 
     base_str = datafile.rstrip('.csv')
     date_str = datafile[:10]
@@ -650,7 +702,7 @@ def HV_ProcessFlights(directory, datafile, ict_file, NIter, SmoothError):
     common_wX_datetime = [datetime.fromtimestamp(ts) for ts in common_wX]
     
     # Calculate the total runtime
-    end_time = time.time()
+    end_time = time_module.time()
     total_runtime = end_time - start_time
     print("Total runtime: {:.1f} seconds".format(total_runtime))
 
@@ -661,17 +713,7 @@ if __name__ == "__main__":
     
     # Load data from csv and ict files
     directory = 'C:/Users/hjver/Documents/dp_research_public/deconvolution/data/'
-    datafiles = ['2019_07_22_HNO3Data.csv', '2019_07_24_HNO3Data.csv', 
-                 '2019_07_25_HNO3Data.csv', '2019_07_29_HNO3Data.csv', 
-                 '2019_07_30_HNO3Data.csv','2019_08_02_HNO3Data.csv', 
-                 '2019_08_03_HNO3Data.csv','2019_08_06_HNO3Data.csv', 
-                 '2019_08_07_HNO3Data.csv', '2019_08_08_HNO3Data.csv', 
-                 '2019_08_12_HNO3Data.csv', '2019_08_13_HNO3Data.csv', 
-                 '2019_08_15_HNO3Data.csv', '2019_08_16_HNO3Data.csv', 
-                 '2019_08_21_HNO3Data.csv', '2019_08_23_HNO3Data.csv', 
-                 '2019_08_26_HNO3Data.csv', '2019_08_29_HNO3Data.csv', 
-                 '2019_08_30_HNO3Data.csv', '2019_08_31_HNO3Data.csv',
-                 '2019_09_03_HNO3Data.csv', '2019_09_05_HNO3Data.csv']
+    datafiles = ['2019_08_07_HNO3Data.csv']
 
     # Assuming iterations and smooth error are the same for all flights, if not you can adjust
     iterations = 5
@@ -681,3 +723,4 @@ if __name__ == "__main__":
         ict_file = Get_ICT_Filename(datafile)
         print(f"Processing {datafile}...")
         HV_ProcessFlights(directory, datafile, ict_file, iterations, smooth_err)
+    
