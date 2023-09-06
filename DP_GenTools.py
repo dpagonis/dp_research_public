@@ -122,7 +122,7 @@ def DP_TUV_ActinicFlux(latitude, longitude, date, timeStamp, mAltitude):
     
     if response.status_code == 200:
         content = response.text
-        print(content)  # Add this line for debugging
+        #print(content)  # Add this line for debugging
         data_str = content.split("\n")[23:]  # Skip first 23 lines
         data_str = "\n".join(data_str)
         
