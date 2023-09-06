@@ -50,7 +50,7 @@ def DP_MeanFP(Temp,Pres_mbar):
     return 6.65e-8 * (1013.25/Pres_mbar) * (Temp / 273.15) * (1+SUTHERLAND/273.15) / (1+SUTHERLAND/Temp)
 
 
-def DP_TUV_ActinicFlux(latitude, longitude, date, timeStamp, mAltitude):
+def DP_TUV_ActinicFlux(latitude, longitude, date, timeStamp, kmAltitude, gAltitude):
     """
     Fetches UV radiation data from the NCAR TUV calculator and returns it as a DataFrame.
     
@@ -68,8 +68,11 @@ def DP_TUV_ActinicFlux(latitude, longitude, date, timeStamp, mAltitude):
     timeStamp : str
         Time for the calculation in 'HH:MM:SS' format.
         
-    mAltitude : float
-        Altitude in meters for the measurement point. Should be a non-negative float.
+    kmAltitude : float
+        Altitude in kilometers for the measurement point. Should be a non-negative float.
+
+    gAltitude: float
+        Altitude in km of the ground surface
         
     Returns:
     --------
@@ -102,8 +105,8 @@ def DP_TUV_ActinicFlux(latitude, longitude, date, timeStamp, mAltitude):
         'ozone': 300,
         'zenith':0,
         'albedo': 0.1,
-        'gAltitude': 0,
-        'mAltitude': mAltitude,
+        'gAltitude': gAltitude,
+        'mAltitude': kmAltitude,
         'taucld': 0.00,
         'zbase': 4.0,
         'ztop': 5.0,
