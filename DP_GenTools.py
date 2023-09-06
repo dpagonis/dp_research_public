@@ -82,7 +82,7 @@ def DP_TUV_ActinicFlux(latitude, longitude, date, timeStamp, kmAltitude, ozone =
         
     Example:
     --------
-    >>> df = call_ncar_tuv(latitude=0, longitude=0, date='20150630', timeStamp='12:00:00', mAltitude=0)
+    >>> df = DP_TUV_ActinicFlux(latitude=0, longitude=0, date='20150630', timeStamp='12:00:00', mAltitude=0)
     >>> print(df)
     
     Notes:
@@ -93,10 +93,19 @@ def DP_TUV_ActinicFlux(latitude, longitude, date, timeStamp, kmAltitude, ozone =
     
     base_url = "https://www.acom.ucar.edu/cgi-bin/acom/TUV/V5.3/tuv"
     
+    def get_time_decimal(sTime):
+      try:
+          hours, minutes, seconds = map(int, sTime.split(":"))
+          decimal_time = hours + minutes / 60 + seconds / 3600
+          return decimal_time
+      except ValueError:
+          print("Invalid time format. Please use HH:MM:SS")
+          return None
+
     params = {
         'wStart': 280,
-        'wStop': 999,
-        'wIntervals': 719,
+        'wStop': 900,
+        'wIntervals': 620,
         'inputMode': 0,
         'latitude': latitude,
         'longitude': longitude,
@@ -115,14 +124,18 @@ def DP_TUV_ActinicFlux(latitude, longitude, date, timeStamp, kmAltitude, ozone =
         'alpha': 1,
         'outputMode': 4,
         'nStreams': -2,
-        'time':12,
+        'time':get_time_decimal(timeStamp),
         'dirsun': 1.0,
         'difdn': 1.0,
         'difup': 1.0
     }
+
+    # Construct the full URL for debugging
+    #full_url = requests.Request('GET', base_url, params=params).prepare().url
+    #print(f"Full URL: {full_url}")
     
     response = requests.get(base_url, params=params)
-    
+
     if response.status_code == 200:
         content = response.text
         #print(content)  # Add this line for debugging
