@@ -11,7 +11,7 @@ class IntensityPlotter(QMainWindow):
     def __init__(self):
         super().__init__()
 
-        default_int_time = 100
+        default_int_time = 500
         self.spec = Spectrometer.from_first_available()
         self.spec.integration_time_micros(default_int_time)
 
