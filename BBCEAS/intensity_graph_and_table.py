@@ -48,11 +48,11 @@ class IntensityPlotter(QMainWindow):
 
         self.plot_widget.scene().sigMouseClicked.connect(self.on_click)
             
-            def on_click(self, event):
-                if event.button() == 1: #left mouse button
-                    mouse_point = self.plot_widget.plotItem.vb.mapToView(event.pos())
-                    x = mouse_point.x()
-                    y = mouse_point.y()
+        def on_click(self, event):
+            if event.button() == 1: #left mouse button
+                mouse_point = self.plot_widget.plotItem.vb.mapToView(event.pos())
+                x = mouse_point.x()
+                y = mouse_point.y()
 
         # Integration time control
         self.int_time_slider = QSlider(Qt.Horizontal)

@@ -44,14 +44,16 @@ class CombinedPlotter(QMainWindow):
 
         self.intensity_plot_widget.setLabel('bottom', 'Time', units='s')
         self.intensity_plot_widget.setLabel('left', 'Intensity')
+        self.plot_widget.setXRange(400, 550)
         self.intensity_plot_data = self.intensity_plot_widget.plot([], [], pen=pg.mkPen('royalblue', width=2))
         self.timestamps = []
         self.intensities = []
 
         # Integration time slider
         self.int_time_slider = QSlider(Qt.Horizontal)
-        self.int_time_slider.setMinimum(10)
-        self.int_time_slider.setMaximum(100_000)
+        self.int_time_slider.setMinimum(50)
+                                    
+        self.int_time_slider.setMaximum(500_000)-
         self.int_time_slider.setValue(default_int_time)
         self.int_time_slider.valueChanged.connect(self.set_integration_time)
         self.main_layout.addWidget(self.int_time_slider)
