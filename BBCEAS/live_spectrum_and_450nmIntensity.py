@@ -1,6 +1,8 @@
 import sys
 import numpy as np
-from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QLabel, QSlider, QHBoxLayout
+import datetime
+import csv
+from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QLabel, QSlider, QHBoxLayout, QPushButton
 from PyQt5.QtCore import Qt, QTimer
 import pyqtgraph as pg
 from seabreeze.spectrometers import Spectrometer
@@ -12,7 +14,7 @@ class CombinedPlotter(QMainWindow):
 
         # Set up the spectrometer
         self.spec = Spectrometer.from_first_available()
-        default_int_time = 5000
+        default_int_time = 100000
         self.spec.integration_time_micros(default_int_time)
 
         # Set up the main window
@@ -41,10 +43,8 @@ class CombinedPlotter(QMainWindow):
         # Create the intensity plot
         self.intensity_plot_widget = pg.PlotWidget()
         self.plot_layout.addWidget(self.intensity_plot_widget)
-
         self.intensity_plot_widget.setLabel('bottom', 'Time', units='s')
         self.intensity_plot_widget.setLabel('left', 'Intensity')
-        self.plot_widget.setXRange(400, 550)
         self.intensity_plot_data = self.intensity_plot_widget.plot([], [], pen=pg.mkPen('royalblue', width=2))
         self.timestamps = []
         self.intensities = []
@@ -52,8 +52,7 @@ class CombinedPlotter(QMainWindow):
         # Integration time slider
         self.int_time_slider = QSlider(Qt.Horizontal)
         self.int_time_slider.setMinimum(50)
-                                    
-        self.int_time_slider.setMaximum(500_000)-
+        self.int_time_slider.setMaximum(500000)
         self.int_time_slider.setValue(default_int_time)
         self.int_time_slider.valueChanged.connect(self.set_integration_time)
         self.main_layout.addWidget(self.int_time_slider)
@@ -62,16 +61,32 @@ class CombinedPlotter(QMainWindow):
         self.int_time_label = QLabel(f"Integration Time: {default_int_time/1e6:.02g} s")
         self.main_layout.addWidget(self.int_time_label)
 
+        # Create a save data button
+        self.save_button = QPushButton("Save Data to CSV")
+        self.main_layout.addWidget(self.save_button)
+        self.save_button.clicked.connect(self.save_data)
+
         # Timer to update plots
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.update_plots)
         self.timer.start(100)
 
+    def save_data(self):
+        timestamp_str = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+        filename = f"data_{timestamp_str}.csv"
+        with open(filename, mode='w', newline='') as file:
+            writer = csv.writer(file)
+            writer.writerow(['Timestamp', 'Intensity'])
+            for timestamp, intensity in zip(self.timestamps, self.intensities):
+                writer.writerow([timestamp, intensity])
+        print(f"Data saved to {filename}")
+
     def update_plots(self):
         # Update spectrum plot
         wavelengths = self.spec.wavelengths()
         intensities = self.spec.intensities()
-        intensities[0:2]=np.nan
+        if len(intensities) > 2:
+            intensities[0:2] = np.nan  # Assuming intensities is a NumPy array
         self.plot_data.setData(wavelengths, intensities)
 
         # Update intensity plot
