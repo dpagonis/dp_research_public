@@ -2,6 +2,7 @@ import sys
 import numpy as np
 import datetime
 import csv
+import os
 from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QLabel, QSlider, QHBoxLayout, QPushButton
 from PyQt5.QtCore import Qt, QTimer
 import pyqtgraph as pg
@@ -74,12 +75,16 @@ class CombinedPlotter(QMainWindow):
     def save_data(self):
         timestamp_str = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
         filename = f"data_{timestamp_str}.csv"
-        with open(filename, mode='w', newline='') as file:
+        filepath = '/home/atmoschem/Documents/CSV_DATA'
+        full_path = os.path.join(filepath, filename)  # Combine the filepath and filename
+
+        with open(full_path, mode='w', newline='') as file:
             writer = csv.writer(file)
             writer.writerow(['Timestamp', 'Intensity'])
             for timestamp, intensity in zip(self.timestamps, self.intensities):
                 writer.writerow([timestamp, intensity])
-        print(f"Data saved to {filename}")
+
+        print(f"Data saved to {full_path}")
 
     def update_plots(self):
         # Update spectrum plot
