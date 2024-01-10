@@ -185,10 +185,10 @@ def FitIRF(csv_filename, directory):
                               fitted_params[2]])
 
     # Define the save directory for figures
-    save_dir = 'C:/Users/hjver/Documents/dp_research_public/deconvolution/data/Figures/'
+    save_dir = directory + 'Figures/'
 
     # Define the directory for CSV files
-    csv_dir = 'C:/Users/hjver/Documents/dp_research_public/deconvolution/data/Output Data'
+    csv_dir = directory + 'Output Data/'
 
     # Adjust the spacing between subplots
     plt.tight_layout()
@@ -286,7 +286,7 @@ def Deconvolve_DblExp(wX, wY, wDest, Tau1, A1, Tau2, A2, NIter, SmoothError):
 def HV_Deconvolve(wX, wY, wDest, IRF_data, SmoothError, NIter, datafile, directory):
 
     # Path for saving CSV file
-    output_data_dir = 'C:/Users/hjver/Documents/dp_research_public/deconvolution/data/Output Data/'
+    output_data_dir = directory + 'Output Data/'
     
     # Delete existing iteration_ii.png debugging files
     existing_files = glob.glob("debugplots/iteration_*.png")
@@ -347,9 +347,6 @@ def HV_Deconvolve(wX, wY, wDest, IRF_data, SmoothError, NIter, datafile, directo
 
     # Extracting date from input CSV filename
     date_str = datafile[:10]
-
-    # Define the output directory for deconvolved data
-    output_data_dir = 'C:/Users/hjver/Documents/dp_research_public/deconvolution/data/Output Data/'
 
     # Save to CSV
     output_df = pd.DataFrame({'time': wX, 'HNO3_190_Hz': wDest})
@@ -609,7 +606,7 @@ def HV_generate_figures(common_wX_datetime, interp_wY, interp_wY_ict, interp_wDe
     plt.legend(loc='upper left')
     plt.tight_layout()
     # plt.savefig(save_dir + f"{date_str}_Original_Data_Correlation_Plot.png")
-    plt.close()
+    plt.show()
 
     # Deconvolved data correlation plot
     plt.figure(figsize=(6, 4))
@@ -622,8 +619,7 @@ def HV_generate_figures(common_wX_datetime, interp_wY, interp_wY_ict, interp_wDe
     plt.legend(loc='upper left')
     plt.tight_layout()
     # plt.savefig(save_dir + f"{date_str}_Deconvolved_Data_Correlation_Plot.png")
-    plt.close()
-
+    plt.show()
 
     # Step Function
     plt.figure(figsize=(10, 8))
@@ -637,7 +633,7 @@ def HV_generate_figures(common_wX_datetime, interp_wY, interp_wY_ict, interp_wDe
     # plt.savefig(save_dir + f"{date_str}_Interpolated_Start_Stop_Data.png")
     plt.close()
 
-def Get_ICT_Filename(csv_filename):
+def HV_Get_ICT_Filename(csv_filename):
     date_str = csv_filename[:10]
     ict_date = date_str.replace("_", "")
     ict_filename = f"FIREXAQ-DACOM_DC8_{ict_date}_R1.ict"
@@ -712,7 +708,11 @@ def HV_ProcessFlights(directory, datafile, ict_file, NIter, SmoothError):
 if __name__ == "__main__":
     
     # Load data from csv and ict files
+
+    # Set global directory
+    global directory
     directory = 'C:/Users/hjver/Documents/dp_research_public/deconvolution/data/'
+    
     datafiles = ['2019_08_07_HNO3Data.csv']
 
     # Assuming iterations and smooth error are the same for all flights, if not you can adjust
@@ -720,7 +720,7 @@ if __name__ == "__main__":
     smooth_err = 0
 
     for datafile in datafiles:
-        ict_file = Get_ICT_Filename(datafile)
+        ict_file = HV_Get_ICT_Filename(datafile)
         print(f"Processing {datafile}...")
         HV_ProcessFlights(directory, datafile, ict_file, iterations, smooth_err)
     
