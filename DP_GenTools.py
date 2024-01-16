@@ -2,6 +2,9 @@ import math
 import numpy as np
 from scipy.integrate import odeint
 import matplotlib.pyplot as plt
+import pandas as pd
+import requests
+from io import StringIO
 
 EARTHRADIUS = 6.371e6 #m
 SUTHERLAND = 110 #K
@@ -10,9 +13,17 @@ SUTHERLAND = 110 #K
 # DP_DistFromLL(Coord1,Coord2): return distance in m given tuples with LAT,LON in degrees
 # DP_Kn(Temp,Pres_mbar,diam_m): Knudsen number
 # DP_MeanFP(Temp,Pres_mbar): input T (K) and P (mbar) return mean free path of air in m
+# DP_TUV_ActinicFlux(inputs): return dataframe with actinic flux from NCAR's TUV calculator across wavelengths
 
 # Classes-------------------------------------------------------------------------------------------
 # VBS_May13 : May et al 2013 JGRA VBS
+
+
+
+#-------------------------------------------------------------------
+# ----------------------FUNCTIONS-----------------------------------
+#-------------------------------------------------------------------
+
 
 def DP_DistFromLL(Coord1,Coord2):
     #return distance in m given tuples with LAT,LON in degrees
@@ -38,6 +49,107 @@ def DP_MeanFP(Temp,Pres_mbar):
     #return mean free path of air in m
     return 6.65e-8 * (1013.25/Pres_mbar) * (Temp / 273.15) * (1+SUTHERLAND/273.15) / (1+SUTHERLAND/Temp)
 
+
+def DP_TUV_ActinicFlux(latitude, longitude, date, timeStamp, kmAltitude, ozone = 300):
+    """
+    Fetches UV radiation data from the NCAR TUV calculator and returns it as a DataFrame.
+    
+    Parameters:
+    -----------
+    latitude : float
+        Latitude for the calculation. Should be a float between -90 and 90.
+        
+    longitude : float
+        Longitude for the calculation. Should be a float between -180 and 180.
+        
+    date : str
+        Date for the calculation in 'YYYYMMDD' format.
+        
+    timeStamp : str
+        Time for the calculation in 'HH:MM:SS' format.
+        
+    kmAltitude : float
+        Altitude in kilometers for the measurement point. Should be a non-negative float.
+
+    ozone: 
+        thickness of the ozone layer in Dobson units
+        
+    Returns:
+    --------
+    pd.DataFrame or None
+        A DataFrame containing the UV radiation data if the API call is successful.
+        Returns None if the API call fails.
+        
+    Example:
+    --------
+    >>> df = DP_TUV_ActinicFlux(latitude=0, longitude=0, date='20150630', timeStamp='12:00:00', mAltitude=0)
+    >>> print(df)
+    
+    Notes:
+    ------
+    - The function assumes that certain other parameters (e.g., 'wStart', 'ozone', etc.) are set to default values.
+    - Ensure that you have access to the internet and that the NCAR TUV calculator is online and operational.
+    """
+    
+    base_url = "https://www.acom.ucar.edu/cgi-bin/acom/TUV/V5.3/tuv"
+    
+    def get_time_decimal(sTime):
+      try:
+          hours, minutes, seconds = map(int, sTime.split(":"))
+          decimal_time = hours + minutes / 60 + seconds / 3600
+          return decimal_time
+      except ValueError:
+          print("Invalid time format. Please use HH:MM:SS")
+          return None
+
+    params = {
+        'wStart': 280,
+        'wStop': 900,
+        'wIntervals': 620,
+        'inputMode': 0,
+        'latitude': latitude,
+        'longitude': longitude,
+        'date': date,
+        'timeStamp': timeStamp,
+        'ozone': ozone,
+        'zenith':0,
+        'albedo': 0.1,
+        'gAltitude': 0.0,
+        'mAltitude': kmAltitude,
+        'taucld': 0.00,
+        'zbase': 4.0,
+        'ztop': 5.0,
+        'tauaer': 0.0,
+        'ssaaer': 0.990,
+        'alpha': 1,
+        'outputMode': 4,
+        'nStreams': -2,
+        'time':get_time_decimal(timeStamp),
+        'dirsun': 1.0,
+        'difdn': 1.0,
+        'difup': 1.0
+    }
+
+    # Construct the full URL for debugging
+    #full_url = requests.Request('GET', base_url, params=params).prepare().url
+    #print(f"Full URL: {full_url}")
+    
+    response = requests.get(base_url, params=params)
+
+    if response.status_code == 200:
+        content = response.text
+        #print(content)  # Add this line for debugging
+        data_str = content.split("\n")[23:]  # Skip first 23 lines
+        data_str = "\n".join(data_str)
+        
+        column_names = ["LOWER WVL", "UPPER WVL", "DIRECT", "DIFFUSE DOWN", "DIFFUSE UP", "TOTAL"]
+        
+        df = pd.read_csv(StringIO(data_str), header=None, delim_whitespace=True, names=column_names)
+        
+        return df
+    else:
+        print(f"Failed to get data: {response.status_code}")
+        return None
 
 #-------------------------------------------------------------------
 # ----------------------CLASSES-------------------------------------
@@ -130,3 +242,4 @@ class VBS_FIREX(VBS):
     CStar_298 = np.array([0.01,0.1,1,10,100,1000,10000])
     dHvap = np.array([(85-4*math.log10(x))*1000 for x in CStar_298])
   #end of class VBS_FIREX
+
