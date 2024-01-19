@@ -12,7 +12,6 @@ from scipy.integrate import trapz
 from scipy import interpolate
 from numba import njit, prange
 from scipy.stats import linregress
-import json
 
 
 def AdjGuess(wG, wE, NSmooth):
@@ -97,21 +96,18 @@ def igor_to_datetime(igor_timestamp):
     timedelta_seconds = timedelta(seconds=igor_timestamp)
 
     return base_datetime + timedelta_seconds
-
+    
 def ict_to_datetime(ict_timestamp, measurement_date):
     base_datetime = datetime.strptime(measurement_date, "%Y%m%d")
     return base_datetime + timedelta(seconds=int(ict_timestamp))
 
-def FitIRF(csv_filename, directory, time_col, IRF_col, calibration_col):
+def FitIRF(data, csv_filename, directory, time_col, IRF_col, calibration_col):
     # Load the data from the CSV file
-    data = pd.read_csv(directory+csv_filename)
-
-    # Extract the date from the CSV filename
-    base_str = datafile.rstrip('.csv')
-
+    # data = pd.read_csv(directory+csv_filename)
+    
     # Extract the x, y, and z values from the data
     x_values_numeric = data[time_col].values
-    x_values_datetime = data[time_col].apply(igor_to_datetime).values
+    x_values_datetime = data['time_col_datetime'].values
     y_values = data[IRF_col].values
     z_values = data[calibration_col].values
 
@@ -149,7 +145,7 @@ def FitIRF(csv_filename, directory, time_col, IRF_col, calibration_col):
         # Modify the data points
         # normalized_y = (y_subset / (column_subset['I_127_Hz'] + column_subset['IH20_145_Hz'])) * 10 ** 6
 
-    # Call the fitting function with the modified subset of data
+        # Call the fitting function with the modified subset of data
         fitted_params, covariance, fitX, fitY = DP_FitDblExp(y_subset, x_subset_numeric)
 
         # Create the subplot for the current subset
@@ -195,11 +191,11 @@ def FitIRF(csv_filename, directory, time_col, IRF_col, calibration_col):
     plt.tight_layout()
 
     # Save the figure as a PNG file in the desired directory
-    plt.savefig(save_dir + f'{base_str}_InstrumentResponseFunction.png')
+    plt.savefig(save_dir + f'{datafiles}_InstrumentResponseFunction.png')
     plt.close()
 
     # Save the fit information as a CSV file with the extracted date in the CSV directory
-    filename = f'{base_str}_InstrumentResponseFunction.csv'
+    filename = f'{datafiles}_InstrumentResponseFunction.csv'
     fit_info_df = pd.DataFrame(fit_info_list)
     fit_info_df.to_csv(os.path.join(csv_dir, filename), index=False, header=False)
 
@@ -350,9 +346,9 @@ def HV_Deconvolve(wX, wY, wDest, IRF_data, SmoothError, NIter, datafile, directo
     date_str = datafile[:10]
 
     # Save to CSV
-    output_df = pd.DataFrame({'time': wX, 'HNO3_190_Hz': wDest})
+    output_df = pd.DataFrame({'time': wX, 'Deconvolved Data': wDest})
 
-    output_filename = f"{output_data_dir}{date_str}_Deconvolved_HNO3Data.csv"
+    output_filename = f"{output_data_dir}{date_str}_Deconvolved_Data.csv"
     output_df.to_csv(output_filename, index=False)
 
     return wDest
@@ -640,7 +636,7 @@ def HV_Get_ICT_Filename(csv_filename):
     ict_filename = f"FIREXAQ-DACOM_DC8_{ict_date}_R1.ict"
     return ict_filename
 
-def HV_ProcessFlights(directory, datafile, ict_file, NIter, SmoothError, time_col, IRF_col, calibration_col, data_col, background_col):
+def HV_ProcessFlights(directory, datafile, ict_file, NIter, SmoothError, time_col, IRF_col, calibration_col, data_col, background_col, data):
 
     start_time=time_module.time()
 
@@ -651,9 +647,6 @@ def HV_ProcessFlights(directory, datafile, ict_file, NIter, SmoothError, time_co
     output_directory = os.path.join(directory, 'Output Data')
     IRF_filename = os.path.join(output_directory, f'{base_str}_InstrumentResponseFunction.csv')
 
-    # Load CSV data
-    data = pd.read_csv(directory+datafile)
-
     # Drop rows where there are NaN values
     data = data.dropna(subset=[data_col, IRF_col])
 
@@ -662,7 +655,7 @@ def HV_ProcessFlights(directory, datafile, ict_file, NIter, SmoothError, time_co
     Background = data[background_col].values
 
     # Fit the IRF before deconvolution
-    FitIRF(datafile, directory, time_col, IRF_col, calibration_col)
+    FitIRF(data, datafile, directory, time_col, IRF_col, calibration_col)
     
     IRF_data = pd.read_csv(IRF_filename)
 
@@ -715,16 +708,17 @@ def HV_ProcessFlights(directory, datafile, ict_file, NIter, SmoothError, time_co
 
 if __name__ == "__main__":
     
-    # Load data from csv and ict files
     # Set global directory
     global directory
     directory = 'C:/Users/hjver/Documents/dp_research_public/deconvolution/data/'
     
+    # Load CSV data
     datafiles = ['2019_08_07_HNO3Data.csv']
 
     # Assuming iterations and smooth error are the same for all flights, if not you can adjust
     iterations = 5
     smooth_err = 0
+    x=5
 
     for datafile in datafiles:
         # Specify column names for each file for Fit_IRF
@@ -735,6 +729,7 @@ if __name__ == "__main__":
         data_col = 'HNO3_190_Hz'
         background_col = 'ZeroKey'    
         
+        # Load the ICT file
         ict_filename = HV_Get_ICT_Filename(datafile)
         ict_file_path = os.path.join(directory, ict_filename)
 
@@ -745,6 +740,14 @@ if __name__ == "__main__":
             print(f"Warning: ICT file not found for {datafile}")
             ict_file = None
 
-        print(f"Processing {datafile}...")
-        HV_ProcessFlights(directory, datafile, ict_file, iterations, smooth_err, time_col, IRF_col, calibration_col, data_col, background_col)
+        # Load CSV data
+        data = pd.read_csv(os.path.join(directory, datafile))
+        
+        # Create a column for original Igor time stamps
+        data[time_col] = data[time_col].copy()
+        
+        # Convert Igor timestamps to datetime
+        data['time_col_datetime'] = data[time_col].apply(igor_to_datetime)
+        
+        HV_ProcessFlights(directory, datafile, ict_file, iterations, smooth_err, time_col, IRF_col, calibration_col, data_col, background_col, data)
     
