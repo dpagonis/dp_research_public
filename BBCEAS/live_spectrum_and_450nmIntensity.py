@@ -71,20 +71,39 @@ class CombinedPlotter(QMainWindow):
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.update_plots)
         self.timer.start(100)
+    
+    #saves csv timestamp vs intensity
+    # def save_data(self):
+    #     timestamp_str = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+    #     filename = f"data_{timestamp_str}.csv"
+    #     filepath = '/home/atmoschem/Documents/CSV_DATA'
+    #     full_path = os.path.join(filepath, filename)  # Combine the filepath and filename
 
+    #     with open(full_path, mode='w', newline='') as file:
+    #         writer = csv.writer(file)
+    #         writer.writerow(['Timestamp', 'Intensity'])
+    #         for timestamp, intensity in zip(self.timestamps, self.intensities):
+    #             writer.writerow([timestamp, intensity])
+    
+    #saves csv wavelength vs intensity
     def save_data(self):
         timestamp_str = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
-        filename = f"data_{timestamp_str}.csv"
+        filename = f"spectrum_data_{timestamp_str}.csv"
         filepath = '/home/atmoschem/Documents/CSV_DATA'
         full_path = os.path.join(filepath, filename)  # Combine the filepath and filename
 
+        # Capture the current spectrum data
+        wavelengths = self.spec.wavelengths()
+        intensities = self.spec.intensities()
+
         with open(full_path, mode='w', newline='') as file:
             writer = csv.writer(file)
-            writer.writerow(['Timestamp', 'Intensity'])
-            for timestamp, intensity in zip(self.timestamps, self.intensities):
-                writer.writerow([timestamp, intensity])
+            writer.writerow(['Wavelength', 'Intensity'])
+            for wavelength, intensity in zip(wavelengths, intensities):
+                writer.writerow([wavelength, intensity])
 
-        print(f"Data saved to {full_path}")
+        print(f"Spectrum data saved to {full_path}")
+        #print(f"Data saved to {full_path}")
 
     def update_plots(self):
         # Update spectrum plot
