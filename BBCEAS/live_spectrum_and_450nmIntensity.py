@@ -8,6 +8,8 @@ from PyQt5.QtCore import Qt, QTimer
 import pyqtgraph as pg
 from seabreeze.spectrometers import Spectrometer
 import time
+import subprocess
+import shutil
 
 class CombinedPlotter(QMainWindow):
     def __init__(self):
