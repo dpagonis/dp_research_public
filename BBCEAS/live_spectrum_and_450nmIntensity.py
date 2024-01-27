@@ -3,13 +3,13 @@ import numpy as np
 import datetime
 import csv
 import os
-from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QLabel, QSlider, QHBoxLayout, QPushButton
+from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QLabel, QSlider, QHBoxLayout, QPushButton, QLineEdit
 from PyQt5.QtCore import Qt, QTimer
 import pyqtgraph as pg
 from seabreeze.spectrometers import Spectrometer
 import time
-import subprocess
-import shutil
+#import subprocess
+#import shutil
 
 class CombinedPlotter(QMainWindow):
     def __init__(self):
@@ -69,6 +69,25 @@ class CombinedPlotter(QMainWindow):
         self.main_layout.addWidget(self.save_button)
         self.save_button.clicked.connect(self.save_data)
 
+        # new code for averaging time input
+        # Averaging time input
+        self.avg_time_input = QLineEdit()
+        self.avg_time_input.setPlaceholderText("Enter averaging time (s)")
+        self.main_layout.addWidget(self.avg_time_input)
+
+        # Button to take a single spectrum
+        self.take_spectrum_button = QPushButton("Take Spectrum")
+        self.main_layout.addWidget(self.take_spectrum_button)
+        self.take_spectrum_button.clicked.connect(self.take_spectrum)
+
+        # Plot for single spectrum
+        self.single_spectrum_plot_widget = pg.PlotWidget()
+        self.main_layout.addWidget(self.single_spectrum_plot_widget)
+        self.single_spectrum_plot_widget.setLabel('bottom', 'Wavelength', units='nm')
+        self.single_spectrum_plot_widget.setLabel('left', 'Intensity')
+        self.single_spectrum_data = self.single_spectrum_plot_widget.plot([], [])
+        #end of new code
+
         # Timer to update plots
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.update_plots)
@@ -87,6 +106,22 @@ class CombinedPlotter(QMainWindow):
     #         for timestamp, intensity in zip(self.timestamps, self.intensities):
     #             writer.writerow([timestamp, intensity])
     
+    # new code for averaging time input
+    def take_spectrum(self):
+        try:
+            averaging_time = float(self.avg_time_input.text())
+        except ValueError:
+            print("Invalid averaging time input")
+            return
+
+        self.spec.integration_time_micros(int(averaging_time * 1e6))
+        wavelengths = self.spec.wavelengths()
+        intensities = self.spec.intensities()
+
+        self.single_spectrum_data.setData(wavelengths, intensities)
+        self.save_single_spectrum(wavelengths, intensities)
+    #end of new code
+
     #saves csv wavelength vs intensity
     def save_data(self):
         timestamp_str = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -106,6 +141,22 @@ class CombinedPlotter(QMainWindow):
 
         print(f"Spectrum data saved to {full_path}")
         #print(f"Data saved to {full_path}")
+
+    #new code for averaging time --> saves the averaged time spectrum data
+    def save_single_spectrum(self, wavelengths, intensities):
+        timestamp_str = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+        filename = f"single_spectrum_{timestamp_str}.csv"
+        filepath = '/path/to/your/directory'  # Change this to your desired path
+        full_path = os.path.join(filepath, filename)
+
+        with open(full_path, mode='w', newline='') as file:
+            writer = csv.writer(file)
+            writer.writerow(['Wavelength', 'Intensity'])
+            for wavelength, intensity in zip(wavelengths, intensities):
+                writer.writerow([wavelength, intensity])
+
+        print(f"Single spectrum data saved to {full_path}")
+    #end of new code
 
     def update_plots(self):
         # Update spectrum plot
