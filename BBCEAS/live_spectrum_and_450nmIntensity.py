@@ -8,8 +8,8 @@ from PyQt5.QtCore import Qt, QTimer
 import pyqtgraph as pg
 from seabreeze.spectrometers import Spectrometer
 import time
-#import subprocess
-#import shutil
+import subprocess
+import shutil
 
 class CombinedPlotter(QMainWindow):
     def __init__(self):
@@ -124,22 +124,61 @@ class CombinedPlotter(QMainWindow):
 
     #saves csv wavelength vs intensity
     def save_data(self):
+        # Timestamp and filename setup
         timestamp_str = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
         filename = f"spectrum_data_{timestamp_str}.csv"
-        filepath = '/home/atmoschem/Documents/CSV_DATA'
-        full_path = os.path.join(filepath, filename)  # Combine the filepath and filename
 
-        # Capture the current spectrum data
+        # Local path for the public repository (change as needed)
+        public_repo_path = '/path/to/local/dpagonis/dp_research_public'
+        public_full_path = os.path.join(public_repo_path, filename)
+
+        # Save spectrum data to the public repository
         wavelengths = self.spec.wavelengths()
         intensities = self.spec.intensities()
 
-        with open(full_path, mode='w', newline='') as file:
+        with open(public_full_path, mode='w', newline='') as file:
             writer = csv.writer(file)
             writer.writerow(['Wavelength', 'Intensity'])
             for wavelength, intensity in zip(wavelengths, intensities):
                 writer.writerow([wavelength, intensity])
 
-        print(f"Spectrum data saved to {full_path}")
+        print(f"Spectrum data saved to {public_full_path}")
+
+        # Path to the local clone of the private repository
+        private_repo_path = '/path/to/local/dpagonis/dp_research_private'
+        private_target_path = os.path.join(private_repo_path, '2024_Whitten_BBCEAS/2023_Data_Kira', filename)
+
+        # Copy file to the private repository directory
+        os.makedirs(os.path.dirname(private_target_path), exist_ok=True)
+        shutil.copy(public_full_path, private_target_path)
+
+        # Git operations to add, commit, and push the file to the private repository
+        try:
+            os.chdir(private_repo_path)
+            subprocess.run(['git', 'add', private_target_path], check=True)
+            subprocess.run(['git', 'commit', '-m', f'Add new spectrum data: {filename}'], check=True)
+            subprocess.run(['git', 'push'], check=True)
+            print(f"File {filename} pushed to private GitHub repository successfully.")
+        except subprocess.CalledProcessError as e:
+            print(f"Error occurred while pushing to GitHub: {e}")
+
+        # Old save_data code
+        # timestamp_str = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+        # filename = f"spectrum_data_{timestamp_str}.csv"
+        # filepath = '/home/atmoschem/Documents/CSV_DATA'
+        # full_path = os.path.join(filepath, filename)  # Combine the filepath and filename
+
+        # # Capture the current spectrum data
+        # wavelengths = self.spec.wavelengths()
+        # intensities = self.spec.intensities()
+
+        # with open(full_path, mode='w', newline='') as file:
+        #     writer = csv.writer(file)
+        #     writer.writerow(['Wavelength', 'Intensity'])
+        #     for wavelength, intensity in zip(wavelengths, intensities):
+        #         writer.writerow([wavelength, intensity])
+
+        # print(f"Spectrum data saved to {full_path}")
         #print(f"Data saved to {full_path}")
 
     #new code for averaging time --> saves the averaged time spectrum data
