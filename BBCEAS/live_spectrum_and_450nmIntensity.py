@@ -120,7 +120,7 @@ class CombinedPlotter(QMainWindow):
         filename = f"spectrum_data_{timestamp_str}.csv"
         
         # Path to the local clone of the private repository
-        private_repo_path = '/home/atmoschem/software/dp_research_private'
+        private_repo_path = '/home/atmoschem/software/dp_research_private/2024_Whitten_BBCEAS'
         private_target_path = os.path.join(private_repo_path, '2024_Whitten_BBCEAS/2023_Data_Kira', filename)
 
         # Create directories if they do not exist
@@ -152,16 +152,29 @@ class CombinedPlotter(QMainWindow):
     def save_single_spectrum(self, wavelengths, intensities):
         timestamp_str = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
         filename = f"single_spectrum_{timestamp_str}.csv"
-        filepath = '/home/atmoschem/software/dp_research_private'  # Change this to your desired path
-        full_path = os.path.join(filepath, filename)
 
-        with open(full_path, mode='w', newline='') as file:
+        # Path to the local clone of the private repository
+        private_repo_path = '/home/atmoschem/software/dp_research_private/2024_Whitten_BBCEAS'
+        private_target_path = os.path.join(private_repo_path, '2024_Whitten_BBCEAS/2023_Data_Kira', filename)
+
+        with open(private_target_path, mode='w', newline='') as file:
             writer = csv.writer(file)
             writer.writerow(['Wavelength', 'Intensity'])
             for wavelength, intensity in zip(wavelengths, intensities):
                     writer.writerow([wavelength, intensity])
 
-        print(f"Single spectrum data saved to {full_path}")
+        print(f"Single spectrum data saved to {private_target_path}")
+
+        # Git operations to add, commit, and push the file to the private repository
+        try:
+            os.chdir(private_repo_path)
+            subprocess.run(['git', 'add', private_target_path], check=True)
+            subprocess.run(['git', 'commit', '-m', f'Add new single spectrum data: {filename}'], check=True)
+            subprocess.run(['git', 'push'], check=True)
+            print(f"File {filename} pushed to private GitHub repository successfully.")
+        except subprocess.CalledProcessError as e:
+            print(f"Error occurred while pushing to GitHub: {e}")
+
     #end of new code
 
     def update_plots(self):
