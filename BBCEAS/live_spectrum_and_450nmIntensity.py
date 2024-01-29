@@ -120,7 +120,7 @@ class CombinedPlotter(QMainWindow):
         filename = f"spectrum_data_{timestamp_str}.csv"
         
         # Path to the local clone of the private repository
-        private_repo_path = '/home/atmoshem/software/dp_research_private'
+        private_repo_path = '/home/atmoschem/software/dp_research_private'
         private_target_path = os.path.join(private_repo_path, '2024_Whitten_BBCEAS/2023_Data_Kira', filename)
 
         # Create directories if they do not exist
@@ -152,7 +152,7 @@ class CombinedPlotter(QMainWindow):
     def save_single_spectrum(self, wavelengths, intensities):
         timestamp_str = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
         filename = f"single_spectrum_{timestamp_str}.csv"
-        filepath = '/home/atmoshem/software/dp_research_private'  # Change this to your desired path
+        filepath = '/home/atmoschem/software/dp_research_private'  # Change this to your desired path
         full_path = os.path.join(filepath, filename)
 
         with open(full_path, mode='w', newline='') as file:
