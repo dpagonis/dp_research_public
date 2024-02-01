@@ -3,11 +3,13 @@ import numpy as np
 import datetime
 import csv
 import os
-from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QLabel, QSlider, QHBoxLayout, QPushButton
+from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QLabel, QSlider, QHBoxLayout, QPushButton, QLineEdit
 from PyQt5.QtCore import Qt, QTimer
 import pyqtgraph as pg
 from seabreeze.spectrometers import Spectrometer
 import time
+import subprocess
+import shutil
 
 class CombinedPlotter(QMainWindow):
     def __init__(self):
@@ -67,48 +69,131 @@ class CombinedPlotter(QMainWindow):
         self.main_layout.addWidget(self.save_button)
         self.save_button.clicked.connect(self.save_data)
 
+        # new code for averaging time input
+        # Averaging time input
+        self.avg_time_input = QLineEdit()
+        self.avg_time_input.setPlaceholderText("Enter averaging time (s)")
+        self.main_layout.addWidget(self.avg_time_input)
+
+        # Button to take a single spectrum
+        self.take_spectrum_button = QPushButton("Take Spectrum")
+        self.main_layout.addWidget(self.take_spectrum_button)
+        self.take_spectrum_button.clicked.connect(self.take_spectrum)
+
+        # Plot for single spectrum
+        self.single_spectrum_plot_widget = pg.PlotWidget()
+        self.main_layout.addWidget(self.single_spectrum_plot_widget)
+        self.single_spectrum_plot_widget.setLabel('bottom', 'Wavelength', units='nm')
+        self.single_spectrum_plot_widget.setLabel('left', 'Intensity')
+        self.single_spectrum_data = self.single_spectrum_plot_widget.plot([], [])
+        #end of new code
+
         # Timer to update plots
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.update_plots)
         self.timer.start(100)
     
-    #saves csv timestamp vs intensity
-    # def save_data(self):
-    #     timestamp_str = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
-    #     filename = f"data_{timestamp_str}.csv"
-    #     filepath = '/home/atmoschem/Documents/CSV_DATA'
-    #     full_path = os.path.join(filepath, filename)  # Combine the filepath and filename
+    # new code for averaging time input
+    def take_spectrum(self):
+        try:
+            averaging_time = float(self.avg_time_input.text())
+        except ValueError:
+            print("Invalid averaging time input")
+            return
+        
+        # Store current integration time from the slider
+        current_int_time = self.int_time_slider.value()
 
-    #     with open(full_path, mode='w', newline='') as file:
-    #         writer = csv.writer(file)
-    #         writer.writerow(['Timestamp', 'Intensity'])
-    #         for timestamp, intensity in zip(self.timestamps, self.intensities):
-    #             writer.writerow([timestamp, intensity])
-    
-    #saves csv wavelength vs intensity
+        self.spec.integration_time_micros(int(averaging_time * 1e6))
+        wavelengths = self.spec.wavelengths()
+        intensities = self.spec.intensities()
+        # Filter wavelengths below 200 nm
+        mask = wavelengths >= 200
+        wavelengths = wavelengths[mask]
+        intensities = intensities[mask]
+
+        self.single_spectrum_data.setData(wavelengths, intensities)
+        self.save_single_spectrum(wavelengths, intensities,averaging_time)
+
+        # Reset integration time back to slider value
+        self.spec.integration_time_micros(current_int_time)
+        self.int_time_label.setText(f"Integration Time: {current_int_time / 1e6:.02g} s")
+    #end of new code
+
+    #saves csv wavelength vs intensity to private repository
     def save_data(self):
+        # Timestamp and filename setup
         timestamp_str = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
         filename = f"spectrum_data_{timestamp_str}.csv"
-        filepath = '/home/atmoschem/Documents/CSV_DATA'
-        full_path = os.path.join(filepath, filename)  # Combine the filepath and filename
+        
+        # Path to the local clone of the private repository
+        private_repo_path = '/home/atmoschem/software/dp_research_private/'
+        private_target_path = os.path.join(private_repo_path, '2024_Whitten_BBCEAS', filename)
 
-        # Capture the current spectrum data
+        # Create directories if they do not exist
+        os.makedirs(os.path.dirname(private_target_path), exist_ok=True)
+
+        # Save spectrum data directly to the private repository
         wavelengths = self.spec.wavelengths()
         intensities = self.spec.intensities()
 
-        with open(full_path, mode='w', newline='') as file:
+        with open(private_target_path, mode='w', newline='') as file:
             writer = csv.writer(file)
             writer.writerow(['Wavelength', 'Intensity'])
             for wavelength, intensity in zip(wavelengths, intensities):
                 writer.writerow([wavelength, intensity])
 
-        print(f"Spectrum data saved to {full_path}")
-        #print(f"Data saved to {full_path}")
+        print(f"Spectrum data saved to {private_target_path}")
+
+        # Git operations to add, commit, and push the file to the private repository
+        try:
+            os.chdir(private_repo_path)
+            subprocess.run(['git', 'add', private_target_path], check=True)
+            subprocess.run(['git', 'commit', '-m', f'Add new spectrum data: {filename}'], check=True)
+            subprocess.run(['git', 'push'], check=True)
+            print(f"File {filename} pushed to private GitHub repository successfully.")
+        except subprocess.CalledProcessError as e:
+            print(f"Error occurred while pushing to GitHub: {e}")
+
+    #new code for averaging time --> saves the averaged time spectrum data
+    def save_single_spectrum(self, wavelengths, intensities, averaging_time):
+        timestamp_str = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+        averaging_time_ms = int(averaging_time * 1000) #averagine time in ms
+        filename = f"single_spectrum_{timestamp_str}_{averaging_time_ms}msAvTime.csv"
+
+        # Path to the local clone of the private repository
+        private_repo_path = '/home/atmoschem/software/dp_research_private/'
+        private_target_path = os.path.join(private_repo_path, '2024_Whitten_BBCEAS', filename)
+
+        with open(private_target_path, mode='w', newline='') as file:
+            writer = csv.writer(file)
+            writer.writerow(['Wavelength', 'Intensity'])
+            for wavelength, intensity in zip(wavelengths, intensities):
+                    writer.writerow([wavelength, intensity])
+
+        print(f"Single spectrum data saved to {private_target_path}")
+
+        # Git operations to add, commit, and push the file to the private repository
+        try:
+            os.chdir(private_repo_path)
+            subprocess.run(['git', 'add', private_target_path], check=True)
+            subprocess.run(['git', 'commit', '-m', f'Add new single spectrum data: {filename}'], check=True)
+            subprocess.run(['git', 'push'], check=True)
+            print(f"File {filename} pushed to private GitHub repository successfully.")
+        except subprocess.CalledProcessError as e:
+            print(f"Error occurred while pushing to GitHub: {e}")
+
+    #end of new code
 
     def update_plots(self):
         # Update spectrum plot
         wavelengths = self.spec.wavelengths()
         intensities = self.spec.intensities()
+        # Filter wavelengths below 200 nm
+        mask = wavelengths >= 200
+        wavelengths = wavelengths[mask]
+        intensities = intensities[mask]
+
         if len(intensities) > 2:
             intensities[0:2] = np.nan  # Assuming intensities is a NumPy array
         self.plot_data.setData(wavelengths, intensities)
