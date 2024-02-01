@@ -100,6 +100,9 @@ class CombinedPlotter(QMainWindow):
         except ValueError:
             print("Invalid averaging time input")
             return
+        
+        # Store current integration time from the slider
+        current_int_time = self.int_time_slider.value()
 
         self.spec.integration_time_micros(int(averaging_time * 1e6))
         wavelengths = self.spec.wavelengths()
@@ -111,6 +114,10 @@ class CombinedPlotter(QMainWindow):
 
         self.single_spectrum_data.setData(wavelengths, intensities)
         self.save_single_spectrum(wavelengths, intensities,averaging_time)
+
+        # Reset integration time back to slider value
+        self.spec.integration_time_micros(current_int_time)
+        self.int_time_label.setText(f"Integration Time: {current_int_time / 1e6:.02g} s")
     #end of new code
 
     #saves csv wavelength vs intensity to private repository
