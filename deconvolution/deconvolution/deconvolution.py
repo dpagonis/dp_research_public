@@ -13,7 +13,6 @@ from scipy import interpolate
 from numba import njit, prange
 from scipy.stats import linregress
 
-
 def AdjGuess(wG, wE, NSmooth):
     if NSmooth == 0 or NSmooth == 1:
         wG = wG.astype(float)  # Convert wG to float data type
@@ -78,6 +77,7 @@ def DP_FitDblExp(wY, wX, PtA=None, PtB=None, x0=None, x1=None, y0=None, y1=None,
     
     # Fit the double exponential curve
     p0 = [A1, tau1, tau2]
+    
     popt, pcov = curve_fit(DP_DblExp_NormalizedIRF, wX[PtA:PtB+1] - x0, wY_norm, p0=p0, bounds=([0,0,0],[1,3600,3600]))
 
     # Generate the fitted curve
@@ -87,100 +87,68 @@ def DP_FitDblExp(wY, wX, PtA=None, PtB=None, x0=None, x1=None, y0=None, y1=None,
     return popt, pcov, fitX, fitY
 
 def FitIRF(data, csv_filename, directory, time_col, IRF_col, calibration_col):
-  # Derive base_filename from csv_filename
+    # Derive base_filename from csv_filename
     base_filename = csv_filename.rstrip('.csv')
-    
+ 
     # Extract the x, y, and z values from the data
-    x_values_numeric = data[time_col].values
-    x_values_datetime = data['time_col_datetime'].values
+    x_values_datetime = data[time_col].values  # Use the correct column name from the function parameter
+    x_values_numeric = np.array([(date - np.datetime64('1970-01-01T00:00:00')).astype('timedelta64[s]').astype(float) for date in x_values_datetime])
     y_values = data[IRF_col].values
     z_values = data[calibration_col].values
 
-    # Find the indices where z_values change from 1 to 0
-    change_indices = np.where((z_values[:-1] == 1) & (z_values[1:] == 0))[0]
+    # Identify start and end indices of segments where 'zero flag' == 1
+    starts = np.where((z_values[:-1] == 0) & (z_values[1:] == 1))[0] + 1
+    ends = np.where((z_values[:-1] == 1) & (z_values[1:] == 0))[0] + 1
 
-    # Define the number of data points to include after each change
-    data_points_after_change = 300
+    # Ensure covering segment from start if it begins with 1
+    if z_values[0] == 1:
+        starts = np.insert(starts, 0, 0)
+    # Ensure covering segment till end if it ends with 1
+    if z_values[-1] == 1:
+        ends = np.append(ends, len(z_values))
 
-    # Define the size of the subplot grid
-    num_subsets = len(change_indices)
+    # Adjust for only displaying the first 5 IRFs
+    display_limit = 5
     num_columns = 2
-    num_rows = (num_subsets + num_columns - 1) // num_columns
+    num_rows = min(len(starts), display_limit)
+    num_rows = (num_rows + num_columns - 1) // num_columns
 
-    # Create the subplots
-    fig, axes = plt.subplots(num_rows, num_columns, figsize=(12, 6))
+    fig, axes = plt.subplots(num_rows, num_columns, figsize=(12, 6), squeeze=False)  # Ensure axes is always 2D
 
-    # Create a list to store the fit information
     fit_info_list = [['time', 'A1', 'Tau1', 'A2', 'Tau2']]
 
-    # Iterate over the subsets and plot the data
-    for i, change_index in enumerate(change_indices):
-        # Calculate the start and end indices for each subset
-        start_index = change_index
-        end_index = start_index + data_points_after_change
-
-        # Get the subset of x and y values
-        x_subset_numeric = x_values_numeric[start_index:end_index]
-        x_subset_datetime = x_values_datetime[start_index:end_index]
-        y_subset = y_values[start_index:end_index]
-
-        # Code for datasets w/o pre-normalized data
-        # Get the corresponding subset of column values from the data
-        # column_subset = data.loc[start_index:end_index - 1, ['I_127_Hz', 'IH20_145_Hz']]
-        # Modify the data points
-        # normalized_y = (y_subset / (column_subset['I_127_Hz'] + column_subset['IH20_145_Hz'])) * 10 ** 6
-
-        # Call the fitting function with the modified subset of data
-        fitted_params, covariance, fitX, fitY = DP_FitDblExp(y_subset, x_subset_numeric)
-
-        # Create the subplot for the current subset
-        if num_rows > 1:
+    for i, (start_index, end_index) in enumerate(zip(starts, ends)):
+        if i < display_limit:  # Limit plotting to first 5
             ax = axes[i // num_columns, i % num_columns]
-        else:
-            ax = axes[i % num_columns]
+            x_subset_numeric = x_values_numeric[start_index:end_index]
+            y_subset = y_values[start_index:end_index]
+            fitted_params, covariance, fitX, fitY = DP_FitDblExp(y_subset, x_subset_numeric)  # Assuming DP_FitDblExp is defined elsewhere
 
-        # Plot the original data points
-        ax.scatter(x_values_datetime[start_index:end_index], y_subset, label='m/z 191: 15N HNO3I', color='blue')
-        ax.plot(x_values_datetime[start_index:end_index], fitY, label='Fitted IRF', color='black', zorder=2)
+            ax.scatter(x_values_datetime[start_index:end_index], y_subset, label='Signal', color='blue')
+            ax.plot(x_values_datetime[start_index:end_index], fitY, label='Fitted IRF', color='black')
 
-        # Add labels and title
-        ax.set_xlabel('Time')
-        ax.set_ylabel('Signal (ncps)')
-        ax.set_title(f'Cal {i + 1}')
+            ax.set_xlabel('Time')
+            ax.set_ylabel('Signal (ncps)')
+            ax.set_title(f'Cal {i + 1}')
+            ax.legend()
 
-        # Add a legend to the plot
-        ax.legend()
-        # Display fit information
-        fit_info = f"A1: {fitted_params[0]:.4f}\n" \
-                   f"tau1: {fitted_params[1]:.4f}\n" \
-                   f"A2: {1-fitted_params[0]:.4f}\n" \
-                   f"tau2: {fitted_params[2]:.4f}"
-        ax.text(0.3, 0.5, fit_info, transform=ax.transAxes, bbox=dict(facecolor='white', edgecolor='gray'))
-        
-        # Create a DateFormatter for the time only
-        time_formatter = mdates.DateFormatter('%H:%M:%S')
+            fit_info = f"A1: {fitted_params[0]:.4f}\nTau1: {fitted_params[1]:.4f}\nA2: {1-fitted_params[0]:.4f}\nTau2: {fitted_params[2]:.4f}"
+            ax.text(0.3, 0.5, fit_info, transform=ax.transAxes, bbox=dict(facecolor='white', edgecolor='gray'))
+            ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M:%S'))
 
-        # Apply the formatter to the x-axis
-        ax.xaxis.set_major_formatter(time_formatter)
+        # Always add fit info to list for all segments
+        if start_index < end_index:  # Ensure there's data in the segment
+            fit_info_list.append([x_values_numeric[start_index], *fitted_params])
 
-        fit_info_list.append([x_subset_numeric[0], fitted_params[0], fitted_params[1], 1 - fitted_params[0],
-                              fitted_params[2]])
-
-    # Define the save directory for figures
-    save_dir = directory + 'Figures/'
-
-    # Define the directory for CSV files
-    csv_dir = directory + 'Output Data/'
-
-    # Adjust the spacing between subplots
     plt.tight_layout()
+    plt.show()
 
     # Save the figure as a PNG file in the desired directory
     plt.savefig(os.path.join(directory, 'Figures', f'{base_filename}_InstrumentResponseFunction.png'))
 
-    # Save the fit information as a CSV file with the extracted date in the CSV directory
-    fit_info_df.to_csv(os.path.join(directory, 'Output Data', f'{base_filename}_InstrumentResponseFunction.csv'), index=False, header=False)
+    # Save the fit information as a CSV file
     fit_info_df = pd.DataFrame(fit_info_list)
+    fit_info_df.to_csv(os.path.join(directory, 'Output Data', f'{base_filename}_InstrumentResponseFunction.csv'), index=False, header=False)    
 
 def Deconvolve_DblExp(wX, wY, wDest, Tau1, A1, Tau2, A2, NIter, SmoothError):
     # Deconvolution algorithm for DOUBLE EXPONENTIAL instrument function
@@ -297,7 +265,7 @@ def HV_Deconvolve(wX, wY, wDest, IRF_data, SmoothError, NIter, datafile, directo
 
     for ii in range(NIter):
         wLastConv[:] = wConv[:]
-        
+
         # Do the convolution
         wConv = HV_Convolve(wX_upsampled, wY_upsampled, IRF_data)
         wConv = wConv/points_per_interval
@@ -368,7 +336,7 @@ def HV_Convolve_chunk(wX, wY, A1, A2, Tau1, Tau2, wConv, start, end):
 
 def HV_Convolve(wX, wY, IRF_Data):
     """Perform convolution at each point and store results in WConv."""
-    
+
     # Create interpolation functions for the parameters
     A1_func = interpolate.interp1d(IRF_Data['time'], IRF_Data['A1'], fill_value=(IRF_Data['A1'].values[0], IRF_Data['A1'].values[-1]), bounds_error=False)
     Tau1_func = interpolate.interp1d(IRF_Data['time'], IRF_Data['Tau1'], fill_value=(IRF_Data['Tau1'].values[0], IRF_Data['Tau1'].values[-1]), bounds_error=False)
@@ -450,12 +418,10 @@ def HV_subtract_background(wY, wDest, wX, background_averages, background_averag
     return wY_subtracted_bg, wDest_subtracted_bg, background_values_interpolated
 
 
-def HV_ProcessFlights(directory, datafile, NIter, SmoothError, time_col, IRF_col, calibration_col, data_col, background_col, data):
-
+def HV_ProcessFlights(directory, datafile, NIter, SmoothError, time_col, IRF_col, calibration_col, data_col, data):
     start_time=time_module.time()
 
     base_str = datafile.rstrip('.csv')
-    # date_str = datafile[:10]
 
     # Create output directory path
     output_directory = os.path.join(directory, 'Output Data')
@@ -464,9 +430,9 @@ def HV_ProcessFlights(directory, datafile, NIter, SmoothError, time_col, IRF_col
     # Drop rows where there are NaN values
     data = data.dropna(subset=[data_col, IRF_col])
 
-    wX = data[time_col].values
+    wX = [pd.Timestamp(dt64).timestamp() for dt64 in data['time_col_datetime'].values]
     wY = data[data_col].values
-    Background = data[background_col].values
+    # Background = data[background_col].values
 
     # Fit the IRF before deconvolution
     FitIRF(data, datafile, directory, time_col, IRF_col, calibration_col)
@@ -484,14 +450,13 @@ def HV_ProcessFlights(directory, datafile, NIter, SmoothError, time_col, IRF_col
     print("Area ratio: {:.4f}".format(1+(integral_wDest-integral_wY)/integral_wY))
 
     # Calculate the background averages and times
-    background_averages, background_average_times = HV_interpolate_background(Background, wY, wX)
+    # background_averages, background_average_times = HV_interpolate_background(Background, wY, wX)
 
     # Subtract BG from original and deconvolved data
-    wY_subtracted_bg, wDest_subtracted_bg, background_values_interpolated = HV_subtract_background(wY, wDest, wX, background_averages, background_average_times)
+    # wY_subtracted_bg, wDest_subtracted_bg, background_values_interpolated = HV_subtract_background(wY, wDest, wX, background_averages, background_average_times)
     
     # Calculate the total runtime
     end_time = time_module.time()
     total_runtime = end_time - start_time
     print("Total runtime: {:.1f} seconds".format(total_runtime))
-
    
