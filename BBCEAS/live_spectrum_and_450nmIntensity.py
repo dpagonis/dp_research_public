@@ -110,7 +110,7 @@ class CombinedPlotter(QMainWindow):
         intensities = intensities[mask]
 
         self.single_spectrum_data.setData(wavelengths, intensities)
-        self.save_single_spectrum(wavelengths, intensities)
+        self.save_single_spectrum(wavelengths, intensities,averaging_time)
     #end of new code
 
     #saves csv wavelength vs intensity to private repository
@@ -149,9 +149,10 @@ class CombinedPlotter(QMainWindow):
             print(f"Error occurred while pushing to GitHub: {e}")
 
     #new code for averaging time --> saves the averaged time spectrum data
-    def save_single_spectrum(self, wavelengths, intensities):
+    def save_single_spectrum(self, wavelengths, intensities, averaging_time):
         timestamp_str = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
-        filename = f"single_spectrum_{timestamp_str}.csv"
+        averaging_time_ms = int(averaging_time * 1000) #averagine time in ms
+        filename = f"single_spectrum_{timestamp_str}_{averaging_time_ms}msAvTime.csv"
 
         # Path to the local clone of the private repository
         private_repo_path = '/home/atmoschem/software/dp_research_private/'
