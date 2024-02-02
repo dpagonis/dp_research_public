@@ -55,7 +55,7 @@ class CombinedPlotter(QMainWindow):
         # Integration time slider
         self.int_time_slider = QSlider(Qt.Horizontal)
         self.int_time_slider.setMinimum(50)
-        self.int_time_slider.setMaximum(500000)
+        self.int_time_slider.setMaximum(15000000)
         self.int_time_slider.setValue(default_int_time)
         self.int_time_slider.valueChanged.connect(self.set_integration_time)
         self.main_layout.addWidget(self.int_time_slider)
