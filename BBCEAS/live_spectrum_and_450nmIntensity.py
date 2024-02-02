@@ -92,6 +92,18 @@ class CombinedPlotter(QMainWindow):
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.update_plots)
         self.timer.start(100)
+
+        # Add Pause and Play Buttons
+        self.pause_button = QPushButton("Pause")
+        self.play_button = QPushButton("Play")
+        
+        # Add buttons to the main layout
+        self.main_layout.addWidget(self.pause_button)
+        self.main_layout.addWidget(self.play_button)
+
+        # Connect buttons to their respective slot functions
+        self.pause_button.clicked.connect(self.pause_timer)
+        self.play_button.clicked.connect(self.start_timer)
     
     # new code for averaging time input
     def take_spectrum(self):
@@ -209,6 +221,16 @@ class CombinedPlotter(QMainWindow):
     def set_integration_time(self, value):
         self.spec.integration_time_micros(value)
         self.int_time_label.setText(f"Integration Time: {value / 1_000_000:.2f}s")
+
+    def pause_timer(self):
+        """Slot function to pause the timer."""
+        self.timer.stop()
+        print("Timer paused")
+
+    def start_timer(self):
+        """Slot function to start the timer."""
+        self.timer.start(100)  # You may adjust the interval as needed
+        print("Timer started")
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
