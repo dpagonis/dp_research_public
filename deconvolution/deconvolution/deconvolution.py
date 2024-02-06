@@ -10,7 +10,7 @@ import glob
 import os
 from scipy.integrate import trapz
 from scipy import interpolate
-from numba import njit, prange
+from numba import njit, prange, objmode
 from scipy.stats import linregress
 
 def AdjGuess(wG, wE, NSmooth):
@@ -124,6 +124,9 @@ def FitIRF(data, csv_filename, directory, time_col, IRF_col, calibration_col):
             y_subset = y_values[start_index:end_index]
             fitted_params, covariance, fitX, fitY = DP_FitDblExp(y_subset, x_subset_numeric)  # Assuming DP_FitDblExp is defined elsewhere
 
+            # DEBUGGING PRINTS
+            print(f"Segment {i+1}: A1={fitted_params[0]}, Tau1={fitted_params[1]}, A2={1-fitted_params[0]}, Tau2={fitted_params[2]}")
+
             ax.scatter(x_values_datetime[start_index:end_index], y_subset, label='Signal', color='blue')
             ax.plot(x_values_datetime[start_index:end_index], fitY, label='Fitted IRF', color='black')
 
@@ -148,6 +151,12 @@ def FitIRF(data, csv_filename, directory, time_col, IRF_col, calibration_col):
 
     # Save the fit information as a CSV file
     fit_info_df = pd.DataFrame(fit_info_list)
+
+    # DEBUG PRINT
+    print(fit_info_df.head(10))  # Print the first 10 rows for inspection
+    print(fit_info_df.tail(10))  # Optionally, print the last 10 rows to inspect end segments
+
+
     fit_info_df.to_csv(os.path.join(directory, 'Output Data', f'{base_filename}_InstrumentResponseFunction.csv'), index=False, header=False)    
 
 def Deconvolve_DblExp(wX, wY, wDest, Tau1, A1, Tau2, A2, NIter, SmoothError):
@@ -232,7 +241,6 @@ def Deconvolve_DblExp(wX, wY, wDest, Tau1, A1, Tau2, A2, NIter, SmoothError):
     return wDest
 
 def HV_Deconvolve(wX, wY, wDest, IRF_data, SmoothError, NIter, datafile, directory):
-
     # Path for saving CSV file
     output_data_dir = directory + 'Output Data/'
     
@@ -302,7 +310,10 @@ def HV_Deconvolve(wX, wY, wDest, IRF_data, SmoothError, NIter, datafile, directo
     output_filename = f"{output_data_dir}{date_str}_Deconvolved_Data.csv"
     output_df.to_csv(output_filename, index=False)
 
+    # DEBUG PRINTS
+    print("Sample of deconvolved data (wDest):", wDest[:5])
     return wDest
+
 
 @njit(parallel=True)
 def HV_Convolve_chunk(wX, wY, A1, A2, Tau1, Tau2, wConv, start, end):
@@ -439,9 +450,17 @@ def HV_ProcessFlights(directory, datafile, NIter, SmoothError, time_col, IRF_col
     
     IRF_data = pd.read_csv(IRF_filename)
 
+    # DEBUG PRINTS
+    print("wX sample:", wX[:5])
+    print("wY sample:", wY[:5])
+    print("wX length:", len(wX), "wY length:", len(wY))
+    print(IRF_data.head())
+
+
     # Deconvolution for CSV data
     wDest = np.zeros_like(wY)
     wDest = HV_Deconvolve(wX, wY, wDest, IRF_data, SmoothError, NIter, datafile, directory)
+
 
     # Calculate the integrals
     integral_wY = trapz(wY,wX)
