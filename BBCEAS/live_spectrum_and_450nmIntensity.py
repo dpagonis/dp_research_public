@@ -106,6 +106,7 @@ class CombinedPlotter(QMainWindow):
         self.timer.start(100)
 
         self.last_save_time = datetime.datetime.now()
+        self.current_integration_time = self.int_time_slider.value()  # Get current value from the slider
 
 
     # new code for averaging time input
@@ -117,7 +118,7 @@ class CombinedPlotter(QMainWindow):
             return
         
         # Store current integration time from the slider
-        current_int_time = self.int_time_slider.value()
+        #current_int_time = self.int_time_slider.value()
 
         self.spec.integration_time_micros(int(averaging_time * 1e6))
         wavelengths = self.spec.wavelengths()
@@ -138,7 +139,7 @@ class CombinedPlotter(QMainWindow):
     #saves csv wavelength vs intensity to private repository
     def save_data(self):
         timestamp_str = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
-        averaging_time_ms = int(14 * 1000) #averagine time in ms
+        averaging_time_ms = int(self.current_integration_time / 1000) #averagine time in ms
         filename = f"single_spectrum_{timestamp_str}_{averaging_time_ms}msAvTime.csv"
 
         # Path to the local clone of the private repository
@@ -224,8 +225,8 @@ class CombinedPlotter(QMainWindow):
          # Determine if it's time to save again (e.g., every 60 seconds)
         current_time = datetime.datetime.now()
         if (current_time - self.last_save_time).total_seconds() > 14:
-            current_integration_time = self.int_time_slider.value()  # Get current value from the slider
-            self.save_data(current_integration_time)  # Pass this value to save_data
+            self.current_integration_time = self.int_time_slider.value()  # Get current value from the slider
+            self.save_data()  # Pass this value to save_data
             self.last_save_time = current_time
 
     def set_integration_time(self, value):
