@@ -17,7 +17,7 @@ class CombinedPlotter(QMainWindow):
 
         # Set up the spectrometer
         self.spec = Spectrometer.from_first_available()
-        default_int_time = 100000
+        default_int_time = 14000000
         self.spec.integration_time_micros(default_int_time)
 
         # Set up the main window
@@ -69,6 +69,18 @@ class CombinedPlotter(QMainWindow):
         self.main_layout.addWidget(self.save_button)
         self.save_button.clicked.connect(self.save_data)
 
+        # Add Pause and Play Buttons
+        self.pause_button = QPushButton("Pause")
+        self.play_button = QPushButton("Play")
+        
+        # Add buttons to the main layout
+        self.main_layout.addWidget(self.pause_button)
+        self.main_layout.addWidget(self.play_button)
+
+        # Connect buttons to their respective slot functions
+        self.pause_button.clicked.connect(self.pause_timer)
+        self.play_button.clicked.connect(self.start_timer)
+
         # new code for averaging time input
         # Averaging time input
         self.avg_time_input = QLineEdit()
@@ -93,18 +105,9 @@ class CombinedPlotter(QMainWindow):
         self.timer.timeout.connect(self.update_plots)
         self.timer.start(100)
 
-        # Add Pause and Play Buttons
-        self.pause_button = QPushButton("Pause")
-        self.play_button = QPushButton("Play")
-        
-        # Add buttons to the main layout
-        self.main_layout.addWidget(self.pause_button)
-        self.main_layout.addWidget(self.play_button)
+        self.last_save_time = datetime.datetime.now()
 
-        # Connect buttons to their respective slot functions
-        self.pause_button.clicked.connect(self.pause_timer)
-        self.play_button.clicked.connect(self.start_timer)
-    
+
     # new code for averaging time input
     def take_spectrum(self):
         try:
@@ -128,19 +131,19 @@ class CombinedPlotter(QMainWindow):
         self.save_single_spectrum(wavelengths, intensities,averaging_time)
 
         # Reset integration time back to slider value
-        self.spec.integration_time_micros(current_int_time)
-        self.int_time_label.setText(f"Integration Time: {current_int_time / 1e6:.02g} s")
+        #self.spec.integration_time_micros(current_int_time)
+        #self.int_time_label.setText(f"Integration Time: {current_int_time / 1e6:.02g} s")
     #end of new code
 
     #saves csv wavelength vs intensity to private repository
     def save_data(self):
-        # Timestamp and filename setup
         timestamp_str = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
-        filename = f"spectrum_data_{timestamp_str}.csv"
-        
+        averaging_time_ms = int(14 * 1000) #averagine time in ms
+        filename = f"single_spectrum_{timestamp_str}_{averaging_time_ms}msAvTime.csv"
+
         # Path to the local clone of the private repository
         private_repo_path = '/home/atmoschem/software/dp_research_private/'
-        private_target_path = os.path.join(private_repo_path, '2024_Whitten_BBCEAS', filename)
+        private_target_path = os.path.join(private_repo_path, '2024_Whitten_BBCEAS/24_Hour_Experiment_Data_Folder', filename)
 
         # Create directories if they do not exist
         os.makedirs(os.path.dirname(private_target_path), exist_ok=True)
@@ -175,7 +178,7 @@ class CombinedPlotter(QMainWindow):
 
         # Path to the local clone of the private repository
         private_repo_path = '/home/atmoschem/software/dp_research_private/'
-        private_target_path = os.path.join(private_repo_path, '2024_Whitten_BBCEAS', filename)
+        private_target_path = os.path.join(private_repo_path, '2024_Whitten_BBCEAS/24_Hour_Experiment_Data_Folder', filename)
 
         with open(private_target_path, mode='w', newline='') as file:
             writer = csv.writer(file)
@@ -217,6 +220,13 @@ class CombinedPlotter(QMainWindow):
         self.intensities.append(avg_intensity)
         self.intensity_plot_data.setData(self.timestamps, self.intensities)
         self.intensity_plot_widget.setXRange(self.timestamps[-1] - 60, self.timestamps[-1])
+
+         # Determine if it's time to save again (e.g., every 60 seconds)
+        current_time = datetime.datetime.now()
+        if (current_time - self.last_save_time).total_seconds() > 14:
+            current_integration_time = self.int_time_slider.value()  # Get current value from the slider
+            self.save_data(current_integration_time)  # Pass this value to save_data
+            self.last_save_time = current_time
 
     def set_integration_time(self, value):
         self.spec.integration_time_micros(value)
