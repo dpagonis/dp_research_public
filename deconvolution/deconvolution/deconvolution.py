@@ -89,12 +89,13 @@ def DP_FitDblExp(wY, wX, PtA=None, PtB=None, x0=None, x1=None, y0=None, y1=None,
 def FitIRF(data, csv_filename, directory, time_col, IRF_col, calibration_col):
     # Derive base_filename from csv_filename
     base_filename = csv_filename.rstrip('.csv')
- 
+
     # Extract the x, y, and z values from the data
-    x_values_datetime = data[time_col].values  # Use the correct column name from the function parameter
+    x_values_datetime = data['time_col_datetime'].values  # Use the correct column name from the function parameter
     x_values_numeric = np.array([(date - np.datetime64('1970-01-01T00:00:00')).astype('timedelta64[s]').astype(float) for date in x_values_datetime])
     y_values = data[IRF_col].values
     z_values = data[calibration_col].values
+
 
     # Identify start and end indices of segments where 'zero flag' == 1
     starts = np.where((z_values[:-1] == 0) & (z_values[1:] == 1))[0] + 1
@@ -310,10 +311,6 @@ def HV_Deconvolve(wX, wY, wDest, IRF_data, SmoothError, NIter, datafile, directo
     output_filename = f"{output_data_dir}{date_str}_Deconvolved_Data.csv"
     output_df.to_csv(output_filename, index=False)
 
-    # DEBUG PRINTS
-    print("Sample of deconvolved data (wDest):", wDest[:5])
-    return wDest
-
 
 @njit(parallel=True)
 def HV_Convolve_chunk(wX, wY, A1, A2, Tau1, Tau2, wConv, start, end):
@@ -473,9 +470,10 @@ def HV_ProcessFlights(directory, datafile, NIter, SmoothError, time_col, IRF_col
 
     # Subtract BG from original and deconvolved data
     # wY_subtracted_bg, wDest_subtracted_bg, background_values_interpolated = HV_subtract_background(wY, wDest, wX, background_averages, background_average_times)
-    
+
     # Calculate the total runtime
     end_time = time_module.time()
     total_runtime = end_time - start_time
     print("Total runtime: {:.1f} seconds".format(total_runtime))
+
    
