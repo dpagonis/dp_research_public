@@ -86,7 +86,7 @@ def DP_FitDblExp(wY, wX, PtA=None, PtB=None, x0=None, x1=None, y0=None, y1=None,
     
     return popt, pcov, fitX, fitY
 
-def FitIRF(data, csv_filename, directory, time_col, IRF_col, calibration_col):
+def FitIRF(data, csv_filename, directory, time_col, IRF_col, calibration_col): #2024-02-20 optional param appears here
     # Derive base_filename from csv_filename
     base_filename = csv_filename.rstrip('.csv')
 
@@ -96,6 +96,7 @@ def FitIRF(data, csv_filename, directory, time_col, IRF_col, calibration_col):
     y_values = data[IRF_col].values
     z_values = data[calibration_col].values
 
+    #2024-02-20 somewhere around here there will be if/else logic for defining the times to be used for fitting
 
     # Identify start and end indices of segments where 'zero flag' == 1
     starts = np.where((z_values[:-1] == 0) & (z_values[1:] == 1))[0] + 1
@@ -142,10 +143,10 @@ def FitIRF(data, csv_filename, directory, time_col, IRF_col, calibration_col):
 
         # Always add fit info to list for all segments
         if start_index < end_index:  # Ensure there's data in the segment
-            fit_info_list.append([x_values_numeric[start_index], *fitted_params])
+            fit_info_list.append([x_values_numeric[start_index], fitted_params[0],fitted_params[1],1-fitted_params[0],fitted_params[2]])
 
     plt.tight_layout()
-    plt.show()
+    #plt.show()
 
     # Save the figure as a PNG file in the desired directory
     plt.savefig(os.path.join(directory, 'Figures', f'{base_filename}_InstrumentResponseFunction.png'))
@@ -238,7 +239,7 @@ def Deconvolve_DblExp(wX, wY, wDest, Tau1, A1, Tau2, A2, NIter, SmoothError):
 
 def HV_Deconvolve(wX, wY, wDest, IRF_data, SmoothError, NIter, datafile, directory):
     # Path for saving CSV file
-    output_data_dir = directory + 'Output Data/'
+    output_data_dir = directory + '/Output Data/'
     
     # Delete existing iteration_ii.png debugging files
     existing_files = glob.glob("debugplots/iteration_*.png")
@@ -272,7 +273,7 @@ def HV_Deconvolve(wX, wY, wDest, IRF_data, SmoothError, NIter, datafile, directo
 
         # Do the convolution
         wConv = HV_Convolve(wX_upsampled, wY_upsampled, IRF_data)
-        wConv = wConv/points_per_interval
+        #wConv = wConv/points_per_interval
 
         wError[:] = wConv - wY_upsampled
         LastR2 = R2
@@ -305,6 +306,7 @@ def HV_Deconvolve(wX, wY, wDest, IRF_data, SmoothError, NIter, datafile, directo
 
     output_filename = f"{output_data_dir}{date_str}_Deconvolved_Data.csv"
     output_df.to_csv(output_filename, index=False)
+    return wDest
 
 
 @njit(parallel=True)
@@ -424,7 +426,7 @@ def HV_PlotFigures(wX, wY, wDest, directory):
     print("Starting HV_PlotFigures...")
     
     # Directory to save figures
-    save_dir = directory + "Figures/"
+    save_dir = directory + "/Figures/"
     print(f"Saving figures to: {save_dir}")
     
     # Convert timestamps back to datetime
@@ -452,7 +454,7 @@ def HV_PlotFigures(wX, wY, wDest, directory):
     # Display the plot
     plt.show()
 
-def HV_ProcessFlights(directory, datafile, NIter, SmoothError, time_col, IRF_col, calibration_col, data_col, data):
+def HV_ProcessFlights(directory, datafile, NIter, SmoothError, time_col, IRF_col, calibration_col, data_col, data): #2024-02-20 there will be a new optional parameter here for looking after the flagged period for fitting IRF (default False)
     start_time=time_module.time()
 
     base_str = datafile.rstrip('.csv')
@@ -469,7 +471,7 @@ def HV_ProcessFlights(directory, datafile, NIter, SmoothError, time_col, IRF_col
     # Background = data[background_col].values
 
     # Fit the IRF before deconvolution
-    FitIRF(data, datafile, directory, time_col, IRF_col, calibration_col)
+    FitIRF(data, datafile, directory, time_col, IRF_col, calibration_col) #2024-02-20 optional parameter gets passed through to FitIRF
     
     IRF_data = pd.read_csv(IRF_filename)
 
@@ -477,11 +479,11 @@ def HV_ProcessFlights(directory, datafile, NIter, SmoothError, time_col, IRF_col
     wDest = np.zeros_like(wY)
     wDest = HV_Deconvolve(wX, wY, wDest, IRF_data, SmoothError, NIter, datafile, directory)
 
-    try:
-        HV_PlotFigures(wX, wY, wDest, directory)
-        print("HV_PlotFigures called successfully.")
-    except Exception as e:
-        print(f"Error calling HV_PlotFigures: {e}")
+    # try:
+    HV_PlotFigures(wX, wY, wDest, directory)
+    print("HV_PlotFigures called successfully.")
+# except Exception as e:
+    #     print(f"Error calling HV_PlotFigures: {e}")
 
     # Calculate the integrals
     integral_wY = trapz(wY,wX)
