@@ -126,7 +126,7 @@ def FitIRF(data, csv_filename, directory, time_col, IRF_col, calibration_col):
             fitted_params, covariance, fitX, fitY = DP_FitDblExp(y_subset, x_subset_numeric)  # Assuming DP_FitDblExp is defined elsewhere
 
             # DEBUGGING PRINTS
-            print(f"Segment {i+1}: A1={fitted_params[0]}, Tau1={fitted_params[1]}, A2={1-fitted_params[0]}, Tau2={fitted_params[2]}")
+            # print(f"Segment {i+1}: A1={fitted_params[0]}, Tau1={fitted_params[1]}, A2={1-fitted_params[0]}, Tau2={fitted_params[2]}")
 
             ax.scatter(x_values_datetime[start_index:end_index], y_subset, label='Signal', color='blue')
             ax.plot(x_values_datetime[start_index:end_index], fitY, label='Fitted IRF', color='black')
@@ -152,11 +152,6 @@ def FitIRF(data, csv_filename, directory, time_col, IRF_col, calibration_col):
 
     # Save the fit information as a CSV file
     fit_info_df = pd.DataFrame(fit_info_list)
-
-    # DEBUG PRINT
-    print(fit_info_df.head(10))  # Print the first 10 rows for inspection
-    print(fit_info_df.tail(10))  # Optionally, print the last 10 rows to inspect end segments
-
 
     fit_info_df.to_csv(os.path.join(directory, 'Output Data', f'{base_filename}_InstrumentResponseFunction.csv'), index=False, header=False)    
 
@@ -425,6 +420,37 @@ def HV_subtract_background(wY, wDest, wX, background_averages, background_averag
 
     return wY_subtracted_bg, wDest_subtracted_bg, background_values_interpolated
 
+def HV_PlotFigures(wX, wY, wDest, directory):
+    print("Starting HV_PlotFigures...")
+    
+    # Directory to save figures
+    save_dir = directory + "Figures/"
+    print(f"Saving figures to: {save_dir}")
+    
+    # Convert timestamps back to datetime
+    times = pd.to_datetime(wX, unit='s')
+
+    # DEGUG to confirm first few data points
+    print(f"First 5 times: {times[:5]}")
+    print(f"First 5 original data points: {wY[:5]}")
+    print(f"First 5 deconvolved data points: {wDest[:5]}")
+    
+    plt.figure(figsize=(10, 6))
+    plt.plot(times, wY, label='Original Data')
+    plt.plot(times, wDest, label='Deconvolved Data')
+    plt.xlabel('Time')
+    plt.ylabel('Signal')
+    plt.title('Original and Deconvolved Signal')
+    plt.legend()
+    plt.tight_layout()
+    
+    # Save the figure before calling plt.show()
+    fig_save_path = os.path.join(save_dir, "Original_and_Deconvolved_Signal.png")
+    plt.savefig(fig_save_path)
+    print(f"Figure saved to: {fig_save_path}")
+    
+    # Display the plot
+    plt.show()
 
 def HV_ProcessFlights(directory, datafile, NIter, SmoothError, time_col, IRF_col, calibration_col, data_col, data):
     start_time=time_module.time()
@@ -447,17 +473,15 @@ def HV_ProcessFlights(directory, datafile, NIter, SmoothError, time_col, IRF_col
     
     IRF_data = pd.read_csv(IRF_filename)
 
-    # DEBUG PRINTS
-    print("wX sample:", wX[:5])
-    print("wY sample:", wY[:5])
-    print("wX length:", len(wX), "wY length:", len(wY))
-    print(IRF_data.head())
-
-
     # Deconvolution for CSV data
     wDest = np.zeros_like(wY)
     wDest = HV_Deconvolve(wX, wY, wDest, IRF_data, SmoothError, NIter, datafile, directory)
 
+    try:
+        HV_PlotFigures(wX, wY, wDest, directory)
+        print("HV_PlotFigures called successfully.")
+    except Exception as e:
+        print(f"Error calling HV_PlotFigures: {e}")
 
     # Calculate the integrals
     integral_wY = trapz(wY,wX)
@@ -465,15 +489,10 @@ def HV_ProcessFlights(directory, datafile, NIter, SmoothError, time_col, IRF_col
 
     print("Area ratio: {:.4f}".format(1+(integral_wDest-integral_wY)/integral_wY))
 
-    # Calculate the background averages and times
-    # background_averages, background_average_times = HV_interpolate_background(Background, wY, wX)
-
-    # Subtract BG from original and deconvolved data
-    # wY_subtracted_bg, wDest_subtracted_bg, background_values_interpolated = HV_subtract_background(wY, wDest, wX, background_averages, background_average_times)
-
     # Calculate the total runtime
     end_time = time_module.time()
     total_runtime = end_time - start_time
     print("Total runtime: {:.1f} seconds".format(total_runtime))
 
+    print('hello')
    
