@@ -477,11 +477,8 @@ def HV_ProcessFlights(directory, datafile, NIter, SmoothError, time_col, IRF_col
     wDest = np.zeros_like(wY)
     wDest = HV_Deconvolve(wX, wY, wDest, IRF_data, SmoothError, NIter, datafile, directory)
 
-    try:
-        HV_PlotFigures(wX, wY, wDest, directory)
-        print("HV_PlotFigures called successfully.")
-    except Exception as e:
-        print(f"Error calling HV_PlotFigures: {e}")
+    # Plot Signal versus time
+    HV_PlotFigures(wX, wY, wDest, directory)
 
     # Calculate the integrals
     integral_wY = trapz(wY,wX)
@@ -492,7 +489,4 @@ def HV_ProcessFlights(directory, datafile, NIter, SmoothError, time_col, IRF_col
     # Calculate the total runtime
     end_time = time_module.time()
     total_runtime = end_time - start_time
-    print("Total runtime: {:.1f} seconds".format(total_runtime))
-
-    print('hello')
-   
+    print("Total runtime: {:.1f} seconds".format(total_runtime))   
