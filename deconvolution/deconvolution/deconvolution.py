@@ -22,7 +22,6 @@ def AdjGuess(wG, wE, NSmooth):
         wG = wG.astype(float)  # Convert wG to float data type
         wG -= wE_Smooth  # subtract error
     else:
-        print("Error (DP_AdjGuess in DP_Deconvolution): NSmooth =", NSmooth)
         raise ValueError("DP_AdjGuess in DP_Deconvolution was passed a bad value for NSmooth")
     
     wG = np.where(wG < 0, 0, wG)
@@ -86,7 +85,7 @@ def DP_FitDblExp(wY, wX, PtA=None, PtB=None, x0=None, x1=None, y0=None, y1=None,
     
     return popt, pcov, fitX, fitY
 
-def FitIRF(data, csv_filename, directory, time_col, IRF_col, calibration_col): #2024-02-20 optional param appears here
+def FitIRF(data, csv_filename, directory, time_col, IRF_col, calibration_col, FIREXint=False): #2024-02-20 optional param appears here
     # Derive base_filename from csv_filename
     base_filename = csv_filename.rstrip('.csv')
 
@@ -96,18 +95,40 @@ def FitIRF(data, csv_filename, directory, time_col, IRF_col, calibration_col): #
     y_values = data[IRF_col].values
     z_values = data[calibration_col].values
 
+    # Code for calculating average background intervals
+    # Find indices where background measurements are taken
+    background_indices = np.where(z_values == 1)[0]
+
+    # Calculate the time intervals between consecutive background measurements
+    background_intervals = np.diff(x_values_numeric[background_indices])
+
+    # Compute the average interval
+    average_interval = np.mean(background_intervals)
+
+    print(f"Average time interval between background measurements: {average_interval} seconds")
+
+    intervals = []
+
     #2024-02-20 somewhere around here there will be if/else logic for defining the times to be used for fitting
+    if FIREXint:
+        # Identify transition from 1 to 0 and fit 100 points after transition
+        transitions = np.where((z_values[:-1] == 1) & (z_values[1:] == 0))[0] + 1
+        starts = transitions
+        # Calculate ends directly, vectorized manner
+        ends = np.minimum(transitions + 100, len(z_values))
+        intervals = list(zip(transitions, ends))
+    else:
+        # Fit where 'zero flag' == 1
+        starts = np.where((z_values[:-1] == 0) & (z_values[1:] == 1))[0] + 1
+        ends = np.where((z_values[:-1] == 1) & (z_values[1:] == 0))[0] + 1
 
-    # Identify start and end indices of segments where 'zero flag' == 1
-    starts = np.where((z_values[:-1] == 0) & (z_values[1:] == 1))[0] + 1
-    ends = np.where((z_values[:-1] == 1) & (z_values[1:] == 0))[0] + 1
+        if z_values[0] == 1:
+            starts = np.insert(starts, 0, 0)
+        if z_values[-1] == 1:
+            ends = np.append(ends, len(z_values))
 
-    # Ensure covering segment from start if it begins with 1
-    if z_values[0] == 1:
-        starts = np.insert(starts, 0, 0)
-    # Ensure covering segment till end if it ends with 1
-    if z_values[-1] == 1:
-        ends = np.append(ends, len(z_values))
+        for start, end in zip(starts, ends):
+            intervals.append((start, end))   
 
     # Adjust for only displaying the first 5 IRFs
     display_limit = 5
@@ -126,8 +147,6 @@ def FitIRF(data, csv_filename, directory, time_col, IRF_col, calibration_col): #
             y_subset = y_values[start_index:end_index]
             fitted_params, covariance, fitX, fitY = DP_FitDblExp(y_subset, x_subset_numeric)  # Assuming DP_FitDblExp is defined elsewhere
 
-            # DEBUGGING PRINTS
-            # print(f"Segment {i+1}: A1={fitted_params[0]}, Tau1={fitted_params[1]}, A2={1-fitted_params[0]}, Tau2={fitted_params[2]}")
 
             ax.scatter(x_values_datetime[start_index:end_index], y_subset, label='Signal', color='blue')
             ax.plot(x_values_datetime[start_index:end_index], fitY, label='Fitted IRF', color='black')
@@ -146,7 +165,7 @@ def FitIRF(data, csv_filename, directory, time_col, IRF_col, calibration_col): #
             fit_info_list.append([x_values_numeric[start_index], fitted_params[0],fitted_params[1],1-fitted_params[0],fitted_params[2]])
 
     plt.tight_layout()
-    #plt.show()
+    # plt.show()
 
     # Save the figure as a PNG file in the desired directory
     plt.savefig(os.path.join(directory, 'Figures', f'{base_filename}_InstrumentResponseFunction.png'))
@@ -295,7 +314,7 @@ def HV_Deconvolve(wX, wY, wDest, IRF_data, SmoothError, NIter, datafile, directo
         plt.savefig(f'debugplots/iteration_{ii}.png')  # save the figure to file
         plt.close()  # close the figure to free up memory
     
-    #downsample 
+    #downsample
     wDest = resample(wDest_upsampled, len(wX))
 
     # Extracting date from input CSV filename
@@ -423,19 +442,11 @@ def HV_subtract_background(wY, wDest, wX, background_averages, background_averag
     return wY_subtracted_bg, wDest_subtracted_bg, background_values_interpolated
 
 def HV_PlotFigures(wX, wY, wDest, directory):
-    print("Starting HV_PlotFigures...")
-    
     # Directory to save figures
     save_dir = directory + "/Figures/"
-    print(f"Saving figures to: {save_dir}")
     
     # Convert timestamps back to datetime
     times = pd.to_datetime(wX, unit='s')
-
-    # DEGUG to confirm first few data points
-    print(f"First 5 times: {times[:5]}")
-    print(f"First 5 original data points: {wY[:5]}")
-    print(f"First 5 deconvolved data points: {wDest[:5]}")
     
     plt.figure(figsize=(10, 6))
     plt.plot(times, wY, label='Original Data')
@@ -449,12 +460,11 @@ def HV_PlotFigures(wX, wY, wDest, directory):
     # Save the figure before calling plt.show()
     fig_save_path = os.path.join(save_dir, "Original_and_Deconvolved_Signal.png")
     plt.savefig(fig_save_path)
-    print(f"Figure saved to: {fig_save_path}")
     
     # Display the plot
     plt.show()
 
-def HV_ProcessFlights(directory, datafile, NIter, SmoothError, time_col, IRF_col, calibration_col, data_col, data): #2024-02-20 there will be a new optional parameter here for looking after the flagged period for fitting IRF (default False)
+def HV_ProcessFlights(directory, datafile, NIter, SmoothError, time_col, IRF_col, calibration_col, data_col, data, FIREXint=False): #2024-02-20 there will be a new optional parameter here for looking after the flagged period for fitting IRF (default False)
     start_time=time_module.time()
 
     base_str = datafile.rstrip('.csv')
@@ -471,7 +481,7 @@ def HV_ProcessFlights(directory, datafile, NIter, SmoothError, time_col, IRF_col
     # Background = data[background_col].values
 
     # Fit the IRF before deconvolution
-    FitIRF(data, datafile, directory, time_col, IRF_col, calibration_col) #2024-02-20 optional parameter gets passed through to FitIRF
+    FitIRF(data, datafile, directory, time_col, IRF_col, calibration_col, FIREXint=FIREXint) #2024-02-20 optional parameter gets passed through to FitIRF
     
     IRF_data = pd.read_csv(IRF_filename)
 
@@ -481,19 +491,17 @@ def HV_ProcessFlights(directory, datafile, NIter, SmoothError, time_col, IRF_col
 
     # Plot Signal versus time
     HV_PlotFigures(wX, wY, wDest, directory)
-    # try:
-    HV_PlotFigures(wX, wY, wDest, directory)
-    print("HV_PlotFigures called successfully.")
-# except Exception as e:
-    #     print(f"Error calling HV_PlotFigures: {e}")
 
     # Calculate the integrals
     integral_wY = trapz(wY,wX)
     integral_wDest = trapz(wDest,wX)
-
+    
     print("Area ratio: {:.4f}".format(1+(integral_wDest-integral_wY)/integral_wY))
 
     # Calculate the total runtime
     end_time = time_module.time()
     total_runtime = end_time - start_time
-    print("Total runtime: {:.1f} seconds".format(total_runtime))   
+    print("Total runtime: {:.1f} seconds".format(total_runtime))
+
+    # Make sure to return all the expected variables
+    return wX, wY, wDest 
