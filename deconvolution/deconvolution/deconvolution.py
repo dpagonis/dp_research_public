@@ -91,7 +91,7 @@ def FitIRF(data, csv_filename, directory, time_col, IRF_col, calibration_col): #
     base_filename = csv_filename.rstrip('.csv')
 
     # Extract the x, y, and z values from the data
-    x_values_datetime = data['time_col_datetime'].values  # Use the correct column name from the function parameter
+    x_values_datetime = data[time_col].values  # Use the correct column name from the function parameter
     x_values_numeric = np.array([(date - np.datetime64('1970-01-01T00:00:00')).astype('timedelta64[s]').astype(float) for date in x_values_datetime])
     y_values = data[IRF_col].values
     z_values = data[calibration_col].values
@@ -109,26 +109,25 @@ def FitIRF(data, csv_filename, directory, time_col, IRF_col, calibration_col): #
     if z_values[-1] == 1:
         ends = np.append(ends, len(z_values))
 
-    # Adjust for only displaying the first 5 IRFs
-    display_limit = 5
+    # Adjust for only displaying the first few IRFs
+    display_limit = 10
     num_columns = 2
     num_rows = min(len(starts), display_limit)
     num_rows = (num_rows + num_columns - 1) // num_columns
 
-    fig, axes = plt.subplots(num_rows, num_columns, figsize=(12, 6), squeeze=False)  # Ensure axes is always 2D
+    fig, axes = plt.subplots(num_rows, num_columns, figsize=(12, 10), squeeze=False)  # Ensure axes is always 2D
 
     fit_info_list = [['time', 'A1', 'Tau1', 'A2', 'Tau2']]
 
     for i, (start_index, end_index) in enumerate(zip(starts, ends)):
+        
+        
+        x_subset_numeric = x_values_numeric[start_index:end_index]
+        y_subset = y_values[start_index:end_index]
+        fitted_params, covariance, fitX, fitY = DP_FitDblExp(y_subset, x_subset_numeric)  # Assuming DP_FitDblExp is defined elsewhere
+        
         if i < display_limit:  # Limit plotting to first 5
             ax = axes[i // num_columns, i % num_columns]
-            x_subset_numeric = x_values_numeric[start_index:end_index]
-            y_subset = y_values[start_index:end_index]
-            fitted_params, covariance, fitX, fitY = DP_FitDblExp(y_subset, x_subset_numeric)  # Assuming DP_FitDblExp is defined elsewhere
-
-            # DEBUGGING PRINTS
-            # print(f"Segment {i+1}: A1={fitted_params[0]}, Tau1={fitted_params[1]}, A2={1-fitted_params[0]}, Tau2={fitted_params[2]}")
-
             ax.scatter(x_values_datetime[start_index:end_index], y_subset, label='Signal', color='blue')
             ax.plot(x_values_datetime[start_index:end_index], fitY, label='Fitted IRF', color='black')
 
@@ -150,6 +149,7 @@ def FitIRF(data, csv_filename, directory, time_col, IRF_col, calibration_col): #
 
     # Save the figure as a PNG file in the desired directory
     plt.savefig(os.path.join(directory, 'Figures', f'{base_filename}_InstrumentResponseFunction.png'))
+    plt.close(fig)
 
     # Save the fit information as a CSV file
     fit_info_df = pd.DataFrame(fit_info_list)
@@ -433,9 +433,9 @@ def HV_PlotFigures(wX, wY, wDest, directory):
     times = pd.to_datetime(wX, unit='s')
 
     # DEGUG to confirm first few data points
-    print(f"First 5 times: {times[:5]}")
-    print(f"First 5 original data points: {wY[:5]}")
-    print(f"First 5 deconvolved data points: {wDest[:5]}")
+    # print(f"First 5 times: {times[:5]}")
+    # print(f"First 5 original data points: {wY[:5]}")
+    # print(f"First 5 deconvolved data points: {wDest[:5]}")
     
     plt.figure(figsize=(10, 6))
     plt.plot(times, wY, label='Original Data')
@@ -466,7 +466,7 @@ def HV_ProcessFlights(directory, datafile, NIter, SmoothError, time_col, IRF_col
     # Drop rows where there are NaN values
     data = data.dropna(subset=[data_col, IRF_col])
 
-    wX = [pd.Timestamp(dt64).timestamp() for dt64 in data['time_col_datetime'].values]
+    wX = [pd.Timestamp(dt64).timestamp() for dt64 in data[time_col].values] 
     wY = data[data_col].values
     # Background = data[background_col].values
 
@@ -495,6 +495,4 @@ def HV_ProcessFlights(directory, datafile, NIter, SmoothError, time_col, IRF_col
     end_time = time_module.time()
     total_runtime = end_time - start_time
     print("Total runtime: {:.1f} seconds".format(total_runtime))
-
-    print('hello')
    
