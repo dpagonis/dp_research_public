@@ -292,7 +292,7 @@ def HV_Deconvolve(wX, wY, wDest, IRF_data, SmoothError, NIter, datafile, directo
 
         # Do the convolution
         wConv = HV_Convolve(wX_upsampled, wY_upsampled, IRF_data)
-        #wConv = wConv/points_per_interval
+        wConv = wConv/points_per_interval
 
         wError[:] = wConv - wY_upsampled
         LastR2 = R2
@@ -464,7 +464,8 @@ def HV_PlotFigures(wX, wY, wDest, directory):
     # Display the plot
     plt.show()
 
-def HV_ProcessFlights(directory, datafile, NIter, SmoothError, time_col, IRF_col, calibration_col, data_col, data, FIREXint=False): #2024-02-20 there will be a new optional parameter here for looking after the flagged period for fitting IRF (default False)
+def HV_ProcessFlights(directory, datafile, NIter, SmoothError, time_col, IRF_col, calibration_col, data_col, data, background_col=None, FIREXint=False):
+
     start_time=time_module.time()
 
     base_str = datafile.rstrip('.csv')
@@ -475,10 +476,16 @@ def HV_ProcessFlights(directory, datafile, NIter, SmoothError, time_col, IRF_col
 
     # Drop rows where there are NaN values
     data = data.dropna(subset=[data_col, IRF_col])
-
+    
+    # Load data
     wX = [pd.Timestamp(dt64).timestamp() for dt64 in data['time_col_datetime'].values]
     wY = data[data_col].values
-    # Background = data[background_col].values
+    # Conditional loading of Background data
+    if background_col and background_col in data.columns:
+        Background = data[background_col].values
+    else:
+        # Handle the case where there is no background data
+        Background = None
 
     # Fit the IRF before deconvolution
     FitIRF(data, datafile, directory, time_col, IRF_col, calibration_col, FIREXint=FIREXint) #2024-02-20 optional parameter gets passed through to FitIRF
@@ -504,4 +511,4 @@ def HV_ProcessFlights(directory, datafile, NIter, SmoothError, time_col, IRF_col
     print("Total runtime: {:.1f} seconds".format(total_runtime))
 
     # Make sure to return all the expected variables
-    return wX, wY, wDest 
+    return wX, wY, wDest, Background
