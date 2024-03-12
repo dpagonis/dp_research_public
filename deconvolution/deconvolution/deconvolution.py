@@ -384,46 +384,49 @@ def HV_Convolve(wX, wY, IRF_Data):
 
     return wConv
 
-def HV_interpolate_background(Background, wY, wX):
+def HV_BG_subtract_data(wX, wY, processed_bg):
+    # Interpolate background
+    HV_interpolate_background(processed_bg, wY, wX)
+
+    # Subtract interpolated background
+    HV_subtract_background(wY, wDest, wX, background_averages, background_average_times)
+
+    return wY_subtracted_bg, wDest_subtracted_bg, background_values_interpolated
+
+def HV_interpolate_background(processed_bg, wY, wX):
+    # Calculate average for each segment, store averages with their time points
+    background_averages = []
+    background_average_times = []
+
     # Find the start and end indices of each background measurement
-    bg_start_indices = np.where(np.diff(Background) == 1)[0] + 1
-    bg_end_indices = np.where(np.diff(Background) == -1)[0]
+    bg_start_indices = np.where(np.diff(processed_bg) == 1)[0] + 1
+    bg_end_indices = np.where(np.diff(processed_bg) == -1)[0]
 
     # Handle the case where the Background starts with 1
-    if Background[0] == 1:
+    if processed_bg[0] == 1:
         bg_start_indices = np.insert(bg_start_indices, 0, 0)
-
     # Handle the case where the Background ends with 1
-    if Background[-1] == 1:
-        bg_end_indices = np.append(bg_end_indices, len(Background) - 1)
+    if processed_bg[-1] == 1:
+        bg_end_indices = np.append(bg_end_indices, len(processed_bg) - 1)
 
-    if len(bg_start_indices) > len(bg_end_indices):
+    #if len(bg_start_indices) > len(bg_end_indices):
         # Remove the unmatched start indices
-        bg_start_indices = bg_start_indices[:len(bg_end_indices)]
-    elif len(bg_end_indices) > len(bg_start_indices):
+        #bg_start_indices = bg_start_indices[:len(bg_end_indices)]
+    #elif len(bg_end_indices) > len(bg_start_indices):
         # Remove the unmatched end indices
-        bg_end_indices = bg_end_indices[:len(bg_start_indices)]
+        #bg_end_indices = bg_end_indices[:len(bg_start_indices)]
 
     # Verify that there are equal numbers of start and end indices
     assert len(bg_start_indices) == len(bg_end_indices), "Number of start and end indices for background measurements do not match"
 
-    # Calculate a separate average for each segment and store these averages along with their time points
-    background_averages = []
-    background_average_times = []
-
     for start, end in zip(bg_start_indices, bg_end_indices):
-        # Exclude the first 10s and last 5s from each segment
-        start += 10
-        end -= 5
-        # Make sure start is still before end after adjusting indices
-        if start >= end:
-            print(f"Skipping background segment from {start} to {end} because it's too short after excluding the first 10s and last 5s")
-            continue
+        # Calculate average for each background segment and its corresponding time
         segment_average = np.mean(wY[start:end+1])
-        background_averages.append(segment_average)
-        # assuming that each segment's representative time point is the average of its start and end times
         segment_time = np.mean(wX[start:end+1])
+        
+        # assuming that each segment's representative time point is the average of its start and end times
         background_average_times.append(segment_time)
+        background_averages.append(segment_average)
         
     return background_averages, background_average_times
 
