@@ -327,7 +327,6 @@ def HV_Deconvolve(wX, wY, wDest, IRF_data, SmoothError, NIter, datafile, directo
     output_df.to_csv(output_filename, index=False)
     return wDest
 
-
 @njit(parallel=True)
 def HV_Convolve_chunk(wX, wY, A1, A2, Tau1, Tau2, wConv, start, end):
     for idx in prange(start, end):
@@ -356,7 +355,6 @@ def HV_Convolve_chunk(wX, wY, A1, A2, Tau1, Tau2, wConv, start, end):
 
         # Perform the convolution
         wConv[idx] = np.dot(wY_i, wKernel)
-
 
 def HV_Convolve(wX, wY, IRF_Data):
     """Perform convolution at each point and store results in WConv."""
