@@ -386,44 +386,43 @@ def HV_Convolve(wX, wY, IRF_Data):
 
     return wConv
 
-def HV_BG_subtract_data(wX, wY, processed_bg):
+def HV_BG_subtract_data(data, wX, processed_wY, processed_wDest, processed_background_key):
     # Interpolate background
-    HV_interpolate_background(processed_bg, wY, wX)
-
+    background_averages, background_average_times = HV_interpolate_background(data, wX, processed_wY, processed_background_key)
     # Subtract interpolated background
-    HV_subtract_background(wY, wDest, wX, background_averages, background_average_times)
+    wY_subtracted_bg, wDest_subtracted_bg, background_values_interpolated = HV_subtract_background(data, wX, processed_wY, processed_wDest, background_averages, background_average_times)
 
     return wY_subtracted_bg, wDest_subtracted_bg, background_values_interpolated
 
-def HV_interpolate_background(processed_bg, wY, wX):
+def HV_interpolate_background(data, wX, processed_wY, processed_background_key):
     # Calculate average for each segment, store averages with their time points
     background_averages = []
     background_average_times = []
 
     # Find the start and end indices of each background measurement
-    bg_start_indices = np.where(np.diff(processed_bg) == 1)[0] + 1
-    bg_end_indices = np.where(np.diff(processed_bg) == -1)[0]
+    bg_start_indices = np.where(np.diff(processed_background_key) == 1)[0] + 1
+    bg_end_indices = np.where(np.diff(processed_background_key) == -1)[0]
 
     # Handle the case where the Background starts with 1
-    if processed_bg[0] == 1:
+    if processed_background_key.iloc[0] == 1:
         bg_start_indices = np.insert(bg_start_indices, 0, 0)
     # Handle the case where the Background ends with 1
-    if processed_bg[-1] == 1:
-        bg_end_indices = np.append(bg_end_indices, len(processed_bg) - 1)
+    if processed_background_key[-1] == 1:
+        bg_end_indices = np.append(bg_end_indices, len(processed_background_key) - 1)
 
-    #if len(bg_start_indices) > len(bg_end_indices):
+    if len(bg_start_indices) > len(bg_end_indices):
         # Remove the unmatched start indices
-        #bg_start_indices = bg_start_indices[:len(bg_end_indices)]
-    #elif len(bg_end_indices) > len(bg_start_indices):
+        bg_start_indices = bg_start_indices[:len(bg_end_indices)]
+    elif len(bg_end_indices) > len(bg_start_indices):
         # Remove the unmatched end indices
-        #bg_end_indices = bg_end_indices[:len(bg_start_indices)]
+        bg_end_indices = bg_end_indices[:len(bg_start_indices)]
 
     # Verify that there are equal numbers of start and end indices
     assert len(bg_start_indices) == len(bg_end_indices), "Number of start and end indices for background measurements do not match"
 
     for start, end in zip(bg_start_indices, bg_end_indices):
         # Calculate average for each background segment and its corresponding time
-        segment_average = np.mean(wY[start:end+1])
+        segment_average = np.mean(processed_wY[start:end+1])
         segment_time = np.mean(wX[start:end+1])
         
         # assuming that each segment's representative time point is the average of its start and end times
@@ -482,12 +481,13 @@ def HV_ProcessFlights(directory, datafile, NIter, SmoothError, time_col, IRF_col
 
     wX = [pd.Timestamp(dt64).timestamp() for dt64 in data[time_col].values] 
     wY = data[data_col].values
+    
     # Conditional loading of Background data
-    if background_col and background_col in data.columns:
-        Background = data[background_col].values
-    else:
+    # if background_col and background_col in data.columns:
+        # Background = data[background_col].values
+    # else:
         # Handle the case where there is no background data
-        Background = None
+        # Background = None
 
     # Fit the IRF before deconvolution
     FitIRF(data, datafile, directory, time_col, IRF_col, calibration_col, FIREXint=FIREXint) #2024-02-20 optional parameter gets passed through to FitIRF
@@ -497,6 +497,9 @@ def HV_ProcessFlights(directory, datafile, NIter, SmoothError, time_col, IRF_col
     # Deconvolution for CSV data
     wDest = np.zeros_like(wY)
     wDest = HV_Deconvolve(wX, wY, wDest, IRF_data, SmoothError, NIter, datafile, directory)
+    
+    # Add the deconvolved data as a new column to the DataFrame
+    data.loc[:, 'deconvolved_data_col'] = wDest
 
     # Plot Signal versus time
     HV_PlotFigures(wX, wY, wDest, directory)
@@ -513,4 +516,4 @@ def HV_ProcessFlights(directory, datafile, NIter, SmoothError, time_col, IRF_col
     print("Total runtime: {:.1f} seconds".format(total_runtime))
 
     # Make sure to return all the expected variables
-    return wX, wY, wDest, Background
+    return data, wX, wY, wDest
