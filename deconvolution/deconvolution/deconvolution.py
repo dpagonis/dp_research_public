@@ -386,15 +386,22 @@ def HV_Convolve(wX, wY, IRF_Data):
 
     return wConv
 
-def HV_BG_subtract_data(data, wX, processed_wY, processed_wDest, processed_background_key):
-    # Interpolate background
-    background_averages, background_average_times = HV_interpolate_background(data, wX, processed_wY, processed_background_key)
+def HV_BG_subtract_data(wX, wY, background_key):
+    # Check if inputs are pandas Series and convert to lists if necessary
+    if isinstance(wX, pd.Series):
+        wX = wX.values.tolist()
+    if isinstance(wY, pd.Series):
+        wY = wY.values.tolist()
+    if isinstance(background_key, pd.Series):
+        background_key = background_key.values.tolist()
+
+    background_averages, background_average_times = HV_interpolate_background(wX, wY, background_key)
     # Subtract interpolated background
-    wY_subtracted_bg, wDest_subtracted_bg, background_values_interpolated = HV_subtract_background(data, wX, processed_wY, processed_wDest, background_averages, background_average_times)
+    wY_subtracted_bg, background_values_interpolated = HV_subtract_background(wX, wY, background_averages, background_average_times)
 
-    return wY_subtracted_bg, wDest_subtracted_bg, background_values_interpolated
+    return wY_subtracted_bg, background_values_interpolated
 
-def HV_interpolate_background(data, wX, processed_wY, processed_background_key):
+def HV_interpolate_background( wX, processed_wY, processed_background_key):
     # Calculate average for each segment, store averages with their time points
     background_averages = []
     background_average_times = []
@@ -404,7 +411,7 @@ def HV_interpolate_background(data, wX, processed_wY, processed_background_key):
     bg_end_indices = np.where(np.diff(processed_background_key) == -1)[0]
 
     # Handle the case where the Background starts with 1
-    if processed_background_key.iloc[0] == 1:
+    if processed_background_key[0] == 1:
         bg_start_indices = np.insert(bg_start_indices, 0, 0)
     # Handle the case where the Background ends with 1
     if processed_background_key[-1] == 1:
@@ -431,17 +438,13 @@ def HV_interpolate_background(data, wX, processed_wY, processed_background_key):
         
     return background_averages, background_average_times
 
-def HV_subtract_background(wY, wDest, wX, background_averages, background_average_times):
+def HV_subtract_background(wX, wY, background_averages, background_average_times):
     # Interpolate the background averages over the entire dataset
     background_values_interpolated = np.interp(wX, background_average_times, background_averages)
 
-    # Subtract the background from the original data
     wY_subtracted_bg = wY - background_values_interpolated
 
-    # Subtract the background from the deconvolved data
-    wDest_subtracted_bg = wDest - background_values_interpolated
-
-    return wY_subtracted_bg, wDest_subtracted_bg, background_values_interpolated
+    return wY_subtracted_bg, background_values_interpolated
 
 def HV_PlotFigures(wX, wY, wDest, directory):
     # Directory to save figures
@@ -497,9 +500,6 @@ def HV_ProcessFlights(directory, datafile, NIter, SmoothError, time_col, IRF_col
     # Deconvolution for CSV data
     wDest = np.zeros_like(wY)
     wDest = HV_Deconvolve(wX, wY, wDest, IRF_data, SmoothError, NIter, datafile, directory)
-    
-    # Add the deconvolved data as a new column to the DataFrame
-    data.loc[:, 'deconvolved_data_col'] = wDest
 
     # Plot Signal versus time
     HV_PlotFigures(wX, wY, wDest, directory)
@@ -516,4 +516,4 @@ def HV_ProcessFlights(directory, datafile, NIter, SmoothError, time_col, IRF_col
     print("Total runtime: {:.1f} seconds".format(total_runtime))
 
     # Make sure to return all the expected variables
-    return data, wX, wY, wDest
+    return wDest
