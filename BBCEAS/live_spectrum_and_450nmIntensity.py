@@ -222,9 +222,9 @@ class CombinedPlotter(QMainWindow):
         self.intensity_plot_data.setData(self.timestamps, self.intensities)
         self.intensity_plot_widget.setXRange(self.timestamps[-1] - 60, self.timestamps[-1])
 
-         # Determine if it's time to save again (e.g., every 20 seconds)
+         # Determine if it's time to save again (e.g., every 30 seconds)
         current_time = datetime.datetime.now()
-        if (current_time - self.last_save_time).total_seconds() > 20:
+        if (current_time - self.last_save_time).total_seconds() > 30:
             self.current_integration_time = self.int_time_slider.value()  # Get current value from the slider
             self.save_data()  # Pass this value to save_data
             self.last_save_time = current_time
