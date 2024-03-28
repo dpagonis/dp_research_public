@@ -17,7 +17,7 @@ class CombinedPlotter(QMainWindow):
 
         # Set up the spectrometer
         self.spec = Spectrometer.from_first_available()
-        default_int_time = 14000000
+        default_int_time = 10000000
         self.spec.integration_time_micros(default_int_time)
 
         # Set up the main window
@@ -222,9 +222,9 @@ class CombinedPlotter(QMainWindow):
         self.intensity_plot_data.setData(self.timestamps, self.intensities)
         self.intensity_plot_widget.setXRange(self.timestamps[-1] - 60, self.timestamps[-1])
 
-         # Determine if it's time to save again (e.g., every 60 seconds)
+         # Determine if it's time to save again (e.g., every 20 seconds)
         current_time = datetime.datetime.now()
-        if (current_time - self.last_save_time).total_seconds() > 30:
+        if (current_time - self.last_save_time).total_seconds() > 20:
             self.current_integration_time = self.int_time_slider.value()  # Get current value from the slider
             self.save_data()  # Pass this value to save_data
             self.last_save_time = current_time
