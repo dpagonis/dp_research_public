@@ -144,7 +144,7 @@ class CombinedPlotter(QMainWindow):
 
         # Path to the local clone of the private repository
         private_repo_path = '/home/atmoschem/software/dp_research_private/'
-        private_target_path = os.path.join(private_repo_path, '2024_Whitten_BBCEAS/24_Hour_Experiment_Data_Folder', filename)
+        private_target_path = os.path.join(private_repo_path, '2024_Whitten_BBCEAS/HeliumExperiment', filename)
 
         # Create directories if they do not exist
         os.makedirs(os.path.dirname(private_target_path), exist_ok=True)
