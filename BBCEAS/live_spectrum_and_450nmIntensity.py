@@ -144,7 +144,7 @@ class CombinedPlotter(QMainWindow):
 
         # Path to the local clone of the private repository
         private_repo_path = '/home/atmoschem/software/dp_research_private/'
-        private_target_path = os.path.join(private_repo_path, '2024_Whitten_BBCEAS/HeliumExperiment', filename)
+        private_target_path = os.path.join(private_repo_path, '2024_Whitten_BBCEAS/HeliumExperiment/WarmUpExperiment', filename)
 
         # Create directories if they do not exist
         os.makedirs(os.path.dirname(private_target_path), exist_ok=True)
@@ -179,7 +179,7 @@ class CombinedPlotter(QMainWindow):
 
         # Path to the local clone of the private repository
         private_repo_path = '/home/atmoschem/software/dp_research_private/'
-        private_target_path = os.path.join(private_repo_path, '2024_Whitten_BBCEAS/HeliumExperiment', filename)
+        private_target_path = os.path.join(private_repo_path, '2024_Whitten_BBCEAS/HeliumExperiment/WarmUpExperiment', filename)
 
         with open(private_target_path, mode='w', newline='') as file:
             writer = csv.writer(file)
