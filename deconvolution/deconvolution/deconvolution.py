@@ -465,9 +465,7 @@ def HV_PlotFigures(wX, wY, wDest, directory):
     # Save the figure before calling plt.show()
     fig_save_path = os.path.join(save_dir, "Original_and_Deconvolved_Signal.png")
     plt.savefig(fig_save_path)
-    
-    # Display the plot
-    plt.show()
+    plt.close()
 
 def HV_ProcessFlights(directory, datafile, NIter, SmoothError, time_col, IRF_col, calibration_col, data_col, data, background_col=None, FIREXint=False):
 
@@ -484,13 +482,6 @@ def HV_ProcessFlights(directory, datafile, NIter, SmoothError, time_col, IRF_col
 
     wX = [pd.Timestamp(dt64).timestamp() for dt64 in data[time_col].values] 
     wY = data[data_col].values
-    
-    # Conditional loading of Background data
-    # if background_col and background_col in data.columns:
-        # Background = data[background_col].values
-    # else:
-        # Handle the case where there is no background data
-        # Background = None
 
     # Fit the IRF before deconvolution
     FitIRF(data, datafile, directory, time_col, IRF_col, calibration_col, FIREXint=FIREXint) #2024-02-20 optional parameter gets passed through to FitIRF
