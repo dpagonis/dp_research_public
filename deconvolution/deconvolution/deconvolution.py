@@ -204,7 +204,18 @@ def Deconvolve_DblExp(wX, wY, wDest, Tau1, A1, Tau2, A2, NIter, SmoothError):
     old_indices = np.arange(len(wX))
     new_indices = np.linspace(0, len(wX) - 1, len(wY) * points_per_interval)
     old_indices_kernel = np.arange(len(wX_kernel))
+    # Introducing debugging statements here:
+    print("Length of wX:", len(wX))
+    print("Length of wY:", len(wY))
+    print("Length of old_indices:", len(old_indices))
     new_indices_kernel = np.linspace(0, len(wX_kernel) - 1, len(wX_kernel) * points_per_interval)
+
+    # DEBUG Calculate the desired number of points per one-second interval
+    points_per_interval = 10  # More points per original interval
+
+    # DEBUG Assuming `wX` covers a time range where such densification makes sense
+    total_points = len(wX) * points_per_interval  # total points intended
+    new_indices = np.linspace(0, len(wX) - 1, total_points)  # Spread over the same x-range
 
     # Upsample
     wY_upsampled = np.interp(new_indices, old_indices, wY)
@@ -228,15 +239,20 @@ def Deconvolve_DblExp(wX, wY, wDest, Tau1, A1, Tau2, A2, NIter, SmoothError):
         
         # define the kernel (instrument response function) and do the convolution
         kernel = (A1 / Tau1) * np.exp(-wX_kernel_upsampled / Tau1) + (A2 / Tau2) * np.exp(-wX_kernel_upsampled / Tau2)
+        kernel /= np.sum(kernel) * delta_x # Normalize kernel
         full_conv = np.convolve(wDest_upsampled, kernel, mode='full') * delta_x
 
         # Correct the shift for 'full' output by selecting the appropriate portion of the convolution
         wConv = full_conv[:len(wY_upsampled)]
         
+        # Determine error between convoluted signal and original data
         wError[:] = wConv - wY_upsampled
+        
+        # Update correlation coefficient
         LastR2 = R2
         R2 = np.corrcoef(wConv, wY_upsampled)[0, 1] ** 2
         
+        # Check for stopping criteria
         if ((abs(R2 - LastR2) / LastR2) * 100 > 1) or (ForceIterations == 1):
             wDest_upsampled = AdjGuess(wDest_upsampled, wError, SmoothError)
         else:
