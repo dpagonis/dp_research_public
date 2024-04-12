@@ -24,7 +24,7 @@ def AdjGuess(wG, wE, NSmooth):
     else:
         raise ValueError("DP_AdjGuess in DP_Deconvolution was passed a bad value for NSmooth")
     
-    wG = np.where(wG < 0, 0, wG)
+    #wG = np.where(wG < 0, 0, wG)
     return wG
 
 def DP_DblExp_NormalizedIRF(x, A1, tau1, tau2):
