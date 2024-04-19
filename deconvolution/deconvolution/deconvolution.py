@@ -254,7 +254,7 @@ def Deconvolve_DblExp(wX, wY, wDest, Tau1, A1, Tau2, A2, NIter, SmoothError):
         
         # Check for stopping criteria
         if ((abs(R2 - LastR2) / LastR2) * 100 > 1) or (ForceIterations == 1):
-            wDest_upsampled = AdjGuess(wDest_upsampled, wError, SmoothError)
+            wDest_upsampled = AdjGuess(wDest_upsampled, wError, SmoothError*points_per_interval)
         else:
             print(f"Stopped deconv at N={ii}, %R2 change={(abs(R2 - LastR2) / LastR2) * 100:.3f}")
             break
