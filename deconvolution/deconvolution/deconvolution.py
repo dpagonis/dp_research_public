@@ -185,9 +185,9 @@ def Deconvolve_DblExp(wX, wY, wDest, Tau1, A1, Tau2, A2, NIter, SmoothError):
     # SmoothError: number of time points to use for error smoothing. Set to 0 for no smoothing
     
     # Delete existing iteration_ii.png debugging files
-    existing_files = glob.glob("debugplots/iteration_*.png")
-    for file_path in existing_files:
-        os.remove(file_path)
+    # existing_files = glob.glob("debugplots/iteration_*.png")
+    # for file_path in existing_files:
+    #     os.remove(file_path)
     
     ForceIterations = 1 if NIter != 0 else 0
     NIter = 100 if NIter == 0 else NIter
@@ -205,10 +205,13 @@ def Deconvolve_DblExp(wX, wY, wDest, Tau1, A1, Tau2, A2, NIter, SmoothError):
     old_indices = np.arange(len(wX))
     new_indices = np.linspace(0, len(wX) - 1, len(wY) * points_per_interval)
     old_indices_kernel = np.arange(len(wX_kernel))
+    
     # Introducing debugging statements here:
-    print("Length of wX:", len(wX))
-    print("Length of wY:", len(wY))
-    print("Length of old_indices:", len(old_indices))
+    print(f'deconvolving double exponential response from {len(wX)} data points')
+    # print("Length of wX:", len(wX))
+    # print("Length of wY:", len(wY))
+    # print("Length of old_indices:", len(old_indices))
+
     new_indices_kernel = np.linspace(0, len(wX_kernel) - 1, len(wX_kernel) * points_per_interval)
 
     # Upsample
@@ -233,8 +236,8 @@ def Deconvolve_DblExp(wX, wY, wDest, Tau1, A1, Tau2, A2, NIter, SmoothError):
         
         # define the kernel (instrument response function) and do the convolution
         kernel = (A1 / Tau1) * np.exp(-wX_kernel_upsampled / Tau1) + (A2 / Tau2) * np.exp(-wX_kernel_upsampled / Tau2)
-        kernel /= np.sum(kernel)# * delta_x # Normalize kernel
-        full_conv = np.convolve(wDest_upsampled, kernel, mode='full')# * delta_x
+        kernel /= np.sum(kernel)* delta_x # Normalize kernel
+        full_conv = np.convolve(wDest_upsampled, kernel, mode='full')* delta_x
 
         # Correct the shift for 'full' output by selecting the appropriate portion of the convolution
         wConv = full_conv[:len(wY_upsampled)]
@@ -253,15 +256,15 @@ def Deconvolve_DblExp(wX, wY, wDest, Tau1, A1, Tau2, A2, NIter, SmoothError):
             print(f"Stopped deconv at N={ii}, %R2 change={(abs(R2 - LastR2) / LastR2) * 100:.3f}")
             break
 
-        # Make and save figure showing progress for debugging
-        fig, axs = plt.subplots()
-        axs.plot(wY_upsampled, color='blue', label='Data')
-        axs.plot(wError, color='red', label='Error')
-        axs.plot(wDest_upsampled, color='green', label='Deconvolved')
-        axs.plot(wConv, color='purple', label='Reconstructed Data')
-        axs.legend()
-        plt.savefig(f'debugplots/iteration_{ii}.png')  # save the figure to file
-        plt.close()  # close the figure to free up memory
+        # # Make and save figure showing progress for debugging
+        # fig, axs = plt.subplots()
+        # axs.plot(wY_upsampled, color='blue', label='Data')
+        # axs.plot(wError, color='red', label='Error')
+        # axs.plot(wDest_upsampled, color='green', label='Deconvolved')
+        # axs.plot(wConv, color='purple', label='Reconstructed Data')
+        # axs.legend()
+        # plt.savefig(f'debugplots/iteration_{ii}.png')  # save the figure to file
+        # plt.close()  # close the figure to free up memory
     
     #downsample 
     wDest = resample(wDest_upsampled, len(wX))
