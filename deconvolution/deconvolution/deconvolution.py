@@ -177,7 +177,7 @@ def FitIRF(data, csv_filename, directory, time_col, IRF_col, calibration_col, FI
 
     fit_info_df.to_csv(os.path.join(directory, 'Output Data', f'{base_filename}_InstrumentResponseFunction.csv'), index=False, header=False)    
 
-def Deconvolve_DblExp(wX, wY, wDest, Tau1, A1, Tau2, A2, NIter, SmoothError):
+def Deconvolve_DblExp(wX, wY, wDest, Tau1, A1, Tau2, A2, NIter, SmoothError, points_per_interval = 10):
     # Deconvolution algorithm for DOUBLE EXPONENTIAL instrument function
     # Takes input data wX (time) and wY (signal), writes deconvolved output to wDest
     # Double-exponential instrument function defined by Tau1, A1, Tau2, A2
@@ -199,7 +199,7 @@ def Deconvolve_DblExp(wX, wY, wDest, Tau1, A1, Tau2, A2, NIter, SmoothError):
     wX_kernel = wX[:N] - wX[0]
     
     # Calculate the desired number of points per one-second interval
-    points_per_interval = 100
+    
 
     # Create an array of indices for the original and upsampled data
     old_indices = np.arange(len(wX))
@@ -250,7 +250,7 @@ def Deconvolve_DblExp(wX, wY, wDest, Tau1, A1, Tau2, A2, NIter, SmoothError):
         R2 = np.corrcoef(wConv, wY_upsampled)[0, 1] ** 2
         
         # Check for stopping criteria
-        if ((abs(R2 - LastR2) / LastR2) * 100 > 1) or (ForceIterations == 1):
+        if ((abs(R2 - LastR2) / LastR2) * 100 > 0.1) or (ForceIterations == 1):
             wDest_upsampled = AdjGuess(wDest_upsampled, wError, SmoothError*points_per_interval)
         else:
             print(f"Stopped deconv at N={ii}, %R2 change={(abs(R2 - LastR2) / LastR2) * 100:.3f}")
