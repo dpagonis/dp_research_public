@@ -208,9 +208,6 @@ def Deconvolve_DblExp(wX, wY, wDest, Tau1, A1, Tau2, A2, NIter, SmoothError, poi
     
     # Introducing debugging statements here:
     print(f'deconvolving double exponential response from {len(wX)} data points')
-    # print("Length of wX:", len(wX))
-    # print("Length of wY:", len(wY))
-    # print("Length of old_indices:", len(old_indices))
 
     new_indices_kernel = np.linspace(0, len(wX_kernel) - 1, len(wX_kernel) * points_per_interval)
 
@@ -255,16 +252,6 @@ def Deconvolve_DblExp(wX, wY, wDest, Tau1, A1, Tau2, A2, NIter, SmoothError, poi
         else:
             print(f"Stopped deconv at N={ii}, %R2 change={(abs(R2 - LastR2) / LastR2) * 100:.3f}")
             break
-
-        # # Make and save figure showing progress for debugging
-        # fig, axs = plt.subplots()
-        # axs.plot(wY_upsampled, color='blue', label='Data')
-        # axs.plot(wError, color='red', label='Error')
-        # axs.plot(wDest_upsampled, color='green', label='Deconvolved')
-        # axs.plot(wConv, color='purple', label='Reconstructed Data')
-        # axs.legend()
-        # plt.savefig(f'debugplots/iteration_{ii}.png')  # save the figure to file
-        # plt.close()  # close the figure to free up memory
     
     #downsample 
     wDest = resample(wDest_upsampled, len(wX))
