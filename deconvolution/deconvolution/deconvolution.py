@@ -12,6 +12,27 @@ from scipy import interpolate
 from numba import njit, prange
 
 def AdjGuess(wG, wE, NSmooth):
+    """
+    Adjusts initial guess array, 'wG', by subtracting error array, 'wE'
+    
+    Parameters:
+    wG (np.ndarray): Initial guess array to be adjusted
+    wE (np.ndarray): Error array to be subtracted from the guess
+    NSmooth (int): Optional smoothing parameter
+                - If 0 or 1: No smoothing applied, direct subtraction of error
+                - If > 1: Applies a moving average smoothing to the error before subtraction
+    
+    Returns:
+    np.ndarray: Adjusted guess array after error subtraction
+
+    Description:
+    Directly modifies guess array 'wG' based on error array 'wE' by the following:
+    - Checking the 'NSmooth' value to determine the smoothing behavior.
+    - If 'NSmooth' is 0 or 1, the function subtracts the error array 'wE' directly from 'wG'.
+    - If 'NSmooth' is greater than 1, it first applies a moving average filter to 'wE' to smooth the error values. This smoothed error is then subtracted from 'wG'.
+    - Subtraction adjusts 'wG' by reducing discrepancies between the modeled data, 'wG', and actual data
+    - Output is the adjusted 'wG', which represents a guess closer to the true data pattern after accounting for errors
+    """
     if NSmooth == 0 or NSmooth == 1:
         wG = wG.astype(float)  # Convert wG to float data type
         wG -= wE  # subtract errors
@@ -22,13 +43,64 @@ def AdjGuess(wG, wE, NSmooth):
     else:
         raise ValueError("DP_AdjGuess in DP_Deconvolution was passed a bad value for NSmooth")
     
+    # Optional: Ensure no negative values in the guess
     #wG = np.where(wG < 0, 0, wG)
     return wG
 
 def DP_DblExp_NormalizedIRF(x, A1, tau1, tau2):
+    """
+    Determines double exponential decay function, normalized by amplitudes
+    
+    Parameters:
+    x (np.ndarray or float): Input array representing time
+    A1 (float): Amplitude of the first exponential component, between 0 and 1
+    tau1 (float): Time constant for the first exponential decay
+    tau2 (float): Time constant for the second exponential decay
+
+    Description:
+    Models a signal decay using two exponential components combined into a single function.
+    Output is calculated by:
+    - Multiplying the amplitude 'A1' with an exponential decay function of 'x' over 'tau1'.
+    - Adding the result to the product of the complement of 'A1' (i.e., 1 - A1) with another exponential decay function of 'x' over 'tau2'.
+    
+    Returns:
+    np.ndarray or float: Calculated values of doube exponential function for each input in 'x'
+    """
     return A1 * np.exp(-x / tau1) + (1 - A1) * np.exp(-x / tau2)
 
 def DP_FitDblExp(wY, wX, PtA=None, PtB=None, x0=None, x1=None, y0=None, y1=None, A1=None, tau1=None, tau2=None):
+    """
+    Fits a double exponential decay function to provided data, 'wY', against time, 'wX'
+    
+    Parameters:
+    wY (np.ndarray): Array containing original signal
+    wX (np.ndarray): Array of time values corresponding to 'wY'
+    PtA (int, optional): Starting index for the fitting range. Defaults to start of 'wX'
+    PtB (int, optional): Ending index for the fitting range. Defaults to end of 'wX'
+    x0 (float, optional): Starting time value for the fitting range. Overrides 'PtA' if provided
+    x1 (float, optional): Ending time value for the fitting range. Overrides 'PtB' if provided
+    y0 (float, optional): Baseline value for normalization. Defaults to the mean of the last 20 points of `wY`
+    y1 (float, optional): Normalization factor. Defaults to the value of `wY` at `PtA`
+    A1 (float, optional): Initial guess for the amplitude of the first exponential component. Defaults to 0.5
+    tau1 (float, optional): Initial guess for the time constant of the first exponential component. Defaults to 1
+    tau2 (float, optional): Initial guess for the time constant of the second exponential component. Defaults to 80
+    
+    Returns:
+    A tuple containing:
+        - popt (np.ndarray): Optimal values for the parameters [A1, tau1, tau2].
+        - pcov (np.ndarray): Covariance matrix of the fitted parameters.
+        - fitX (np.ndarray): The time values used for the fit.
+        - fitY (np.ndarray): The fitted double exponential function values.
+    
+    Description:
+    Applies nonlinear least squares to fit a double exponential model to data in a specified range.
+    The model combines two exponential decay functions by the following:
+    - Selects the segment of the data specified by `PtA` and `PtB` or `x0` and `x1`.
+    - Normalizes segment based on `y0` and `y1`
+    - Fits the normalized data to a double exponential function using the initial guesses for amplitudes and time constants
+    - Fitting is constrained within specified bounds to ensure realistic parameters
+    - Recalculates the fitted curve over the original time values to produce output that can be compared to original data
+    """
     wX = np.array(wX)  # Convert wX to a numpy array
     wY = np.array(wY)  # Convert wY to a numpy array
 
@@ -84,6 +156,30 @@ def DP_FitDblExp(wY, wX, PtA=None, PtB=None, x0=None, x1=None, y0=None, y1=None,
     return popt, pcov, fitX, fitY
 
 def FitIRF(data, csv_filename, directory, time_col, IRF_col, calibration_col, FIREXint=False): 
+    """
+    Fits instrument response functions (IRFs) to time-resolved segments of signal based on calibration flags
+
+    Parameters:
+    data (pd.DataFrame): Input dataset containing time series and IRF data
+    csv_filename (str): Name of input CSV file
+    directory (str): Directory path where output files will be saved
+    time_col (str): Column name for time values in dataset
+    IRF_col (str): Column name for IRF values in dataset
+    calibration_col (str): Column name for calibration flag values in dataset
+    FIREXint (bool, optional): Flag to determine fitting logic
+                                - If TRUE, identifies transitions from 1 to 0
+                                - Defaults to False
+
+    Returns:
+    None: Function saves fitted IRF plots and parameters to the specified directory
+    
+    Description:
+    IRFs are fit by the following steps:
+    - Identify fitting intervals based on calibration flags and the FIREXint flag
+    - Fit a double exponential decay model to data within each interval
+    - Visualize and save the fitted models with original data for comparison
+    - Output fit parameters and plots to designated files 
+    """
     # Derive base_filename from csv_filename
     base_filename = csv_filename.rstrip('.csv')
 
@@ -163,13 +259,34 @@ def FitIRF(data, csv_filename, directory, time_col, IRF_col, calibration_col, FI
 
     fit_info_df.to_csv(os.path.join(directory, 'Output Data', f'{base_filename}_InstrumentResponseFunction.csv'), index=False, header=False)    
 
-def Deconvolve_DblExp(wX, wY, wDest, Tau1, A1, Tau2, A2, NIter, SmoothError, points_per_interval = 10):
-    # Deconvolution algorithm for DOUBLE EXPONENTIAL instrument function
-    # Takes input data wX (time) and wY (signal), writes deconvolved output to wDest
-    # Double-exponential instrument function defined by Tau1, A1, Tau2, A2
-    # NIter: number of iterations of the deconvolution algorithm, 0 is autostop
-    # SmoothError: number of time points to use for error smoothing. Set to 0 for no smoothing
-    
+def Deconvolve_DblExp(wX, wY, wDest, Tau1, A1, Tau2, A2, NIter, SmoothError, points_per_interval = 0):
+    """
+    Deconvolves signal, 'wY', using double exponential kernel at each point
+
+    Parameters:
+    wX (np.ndarray): Array of time values
+    wY (np.ndarray): Array of signal values
+    wDest (np.ndarray): Array to store deconvolved signal
+    Tau1 (float): Time constant for the first exponential component
+    A1 (float): Amplitude for the first exponential component
+    Tau2 (float): Time constant for the second exponential component
+    A2 (float): Amplitude for the second exponential component
+    NIter (int): Number of iterations for the deconvolution process
+    SmoothError (int): Controls error smoothing
+    points_per_interval (int, optional): Number of points per interval for upsampling. Defaults to 0
+
+    Returns:
+    np.ndarray: Deconvolved signal array
+
+    Description:
+    Iteratively deconvolves signal based on IRF's by the following:
+    - Upsampling original signal
+    - Defining IRF using amplitudes and decay constants, then convolving kernel with the upsampled signal
+    - Comparing convolved signal with upsampled original to compute errors, which are then smoothed if specified
+    - Adjusting deconvolved signal estimate iteratively based on the smoothed errors, refining the estimate to minimize errors
+    - Iterations continue until the change in the correlation coefficient between consecutive iterations is less than 0.1%
+    - Deconvolved signal is downsampled back to original resolution
+    """
     # Delete existing iteration_ii.png debugging files
     existing_files = glob.glob("debugplots/iteration_*.png")
     for file_path in existing_files:
@@ -239,7 +356,30 @@ def Deconvolve_DblExp(wX, wY, wDest, Tau1, A1, Tau2, A2, NIter, SmoothError, poi
     return wDest
 
 def HV_Deconvolve(wX, wY, wDest, IRF_data, SmoothError, NIter, datafile, directory):
-    """Perfrom deconvolution at each point and return results as wDest"""    
+    """Performs iterative deconvolution on signal using provided IRF
+
+    Parameters:
+    wX (np.ndarray): Array of time values corresponding to wY
+    wY (np.ndarray): Array of signal to be deconvovled
+    wDest (np.ndarray): Array to store deconvolved signal
+    IRF_data (np.ndarray): Array of IRF values
+    SmoothError (int): Smoothing factor applied to error in each iteration
+    NIter (int): Number of iterations to perform in deconvolution process
+    datafile (str): Path to dat file used for output file naming
+    directory (str): Base directory path where output files will be stored
+
+    Returns:
+    np.ndarray: Array containing deconvovled signal
+
+    Description:
+    Applies an iterative process to deconvolved signal the following steps:
+    - Upsampling original signal 
+    - Convolving the upsampled signal with the IRF
+    - Calculating the error between convoluted signal and upsampled original
+    - Adjusting deconvolved signal guess iteratively based on the smoothed error
+    - Repeating this process for a specified number of iterations or until changes in the correlation coefficient between iterations fall below 0.1%
+    - Downsampling deconvolved signal to original resolution
+    """    
     # Path for saving CSV file
     output_data_dir = directory + '/Output Data/'
     
@@ -312,6 +452,21 @@ def HV_Deconvolve(wX, wY, wDest, IRF_data, SmoothError, NIter, datafile, directo
 
 @njit(parallel=True)
 def HV_Convolve_chunk(wX, wY, A1, A2, Tau1, Tau2, wConv, start, end):
+    """
+    Runs in paralell to perform convolution over separate chunks of data
+
+    Parameters:
+    wX (np.ndarray): Array of time values 
+    wY (np.ndarray): Array of signal values corresponding to time values in 'wX'
+    A1 (np.ndarray): Array of amplitude values for the first exponential decay component at each time point
+    A2 (np.ndarray): Array of amplitude values for the second exponential decay component at each time point
+    Tau1 (np.ndarray): Array of time constants for the first exponential decay component at each time point
+    Tau2 (np.ndarray): Array of time constants for the second exponential decay component at each time point
+    wConv (np.ndarray): Output array where the convolved signal is stored
+    start (int): Starting index of the chunk of data to process
+    end (int): Ending index of the chunk of data to process
+
+    """
     for idx in prange(start, end):
         # Get A and tau values at time i
         A1_i = A1[idx]
@@ -340,7 +495,18 @@ def HV_Convolve_chunk(wX, wY, A1, A2, Tau1, Tau2, wConv, start, end):
         wConv[idx] = np.dot(wY_i, wKernel)
 
 def HV_Convolve(wX, wY, IRF_Data):
-    """Perform convolution at each point and store results in WConv."""
+    """
+    Performs convolution of signal with IRF for each segment
+    
+    Parameters:
+    wX (np.ndarray): Array of time values 
+    wY (np.ndarray): Array of signal values corresponding to time values in 'wX'
+    IRF_Data (pd.DataFrame): DataFrame containing IRF parameters, columns for 'time', 'A1', 'Tau1', 'Tau2'
+    
+    Returns:
+    np.ndarray: Array containing convolved signal, represents output that would be observed by
+    an instrument with specified IRF
+    """
 
     # Create interpolation functions for the parameters
     A1_func = interpolate.interp1d(IRF_Data['time'], IRF_Data['A1'], fill_value=(IRF_Data['A1'].values[0], IRF_Data['A1'].values[-1]), bounds_error=False)
@@ -428,12 +594,22 @@ def HV_subtract_background(wX, wY, background_averages, background_average_times
     return wY_subtracted_bg, background_values_interpolated
 
 def HV_PlotFigures(wX, wY, wDest, directory):
+    """
+    Plots original, deconvolved signals vs. time, saves plot to specified directory
+
+    Parameters:
+    wX (np.ndarray): Array of Unix timestamps 
+    wY (np.ndarray): Array of original signal values
+    wDest (np.ndarray): Array of deconvolved signal values
+    directory (str): Base directory where plot will be saved as PNG
+    """
     # Directory to save figures
     save_dir = directory + "/Figures/"
     
     # Convert timestamps back to datetime
     times = pd.to_datetime(wX, unit='s')
     
+    # Plot original, deconvolved signal vs. time
     plt.figure(figsize=(10, 6))
     plt.plot(times, wY, label='Original Data')
     plt.plot(times, wDest, label='Deconvolved Data')
@@ -443,14 +619,32 @@ def HV_PlotFigures(wX, wY, wDest, directory):
     plt.legend()
     plt.tight_layout()
     
-    # Save the figure before calling plt.show()
+    # Save the figure
     fig_save_path = os.path.join(save_dir, "Original_and_Deconvolved_Signal.png")
     plt.savefig(fig_save_path)
     plt.close()
 
 def HV_ProcessFlights(directory, datafile, NIter, SmoothError, time_col, IRF_col, calibration_col, data_col, data, background_col=None, FIREXint=False):
    
-    """Processes flight data by fitting the Instrument Response Function (IRF) and performing deconvolution"""
+    """
+    Processes flight data by fitting Instrument Response Functions (IRFs) and performing deconvolution
+    
+    Parameters:
+    directory (str): Directory path where output files will be saved
+    datafile (str): Name of csv file containing data
+    NIter (int): Number of iterations for the deconvolution process
+    SmoothError (int): Controls error smoothing
+    time_col (str): Column in dataset that contains time data
+    IRF_col (str): Column in dataset containing IRF fitting data
+    calibration_col (str): Column containing calibration flags
+    data_col(str): Column containing signal
+    data (pd.DataFrame): DataFrame containing all original data
+    background_col (str, optional): Column containing background flags
+    FIREXint (bool, optional): Flag to determine if specific integration intervals are used, Default False
+
+    Returns:
+    np.ndarray: Array of deconvolved signal aligned with time series
+    """
     start_time=time_module.time()
 
     base_str = datafile.rstrip('.csv')
