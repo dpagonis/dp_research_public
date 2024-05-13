@@ -4,14 +4,12 @@ import matplotlib.dates as mdates
 from scipy.optimize import curve_fit
 from scipy.signal import resample
 import pandas as pd
-from datetime import datetime, timedelta, time
 import time as time_module
 import glob
 import os
 from scipy.integrate import trapz
 from scipy import interpolate
-from numba import njit, prange, objmode
-from scipy.stats import linregress
+from numba import njit, prange
 
 def AdjGuess(wG, wE, NSmooth):
     if NSmooth == 0 or NSmooth == 1:
@@ -85,7 +83,7 @@ def DP_FitDblExp(wY, wX, PtA=None, PtB=None, x0=None, x1=None, y0=None, y1=None,
     
     return popt, pcov, fitX, fitY
 
-def FitIRF(data, csv_filename, directory, time_col, IRF_col, calibration_col, FIREXint=False): #2024-02-20 optional param appears here
+def FitIRF(data, csv_filename, directory, time_col, IRF_col, calibration_col, FIREXint=False): 
     # Derive base_filename from csv_filename
     base_filename = csv_filename.rstrip('.csv')
 
@@ -95,21 +93,9 @@ def FitIRF(data, csv_filename, directory, time_col, IRF_col, calibration_col, FI
     y_values = data[IRF_col].values
     z_values = data[calibration_col].values
 
-    # Code for calculating average background intervals
-    # Find indices where background measurements are taken
-    background_indices = np.where(z_values == 1)[0]
-
-    # Calculate the time intervals between consecutive background measurements
-    background_intervals = np.diff(x_values_numeric[background_indices])
-
-    # Compute the average interval
-    average_interval = np.mean(background_intervals)
-
-    print(f"Average time interval between background measurements: {average_interval} seconds")
-
     intervals = []
 
-    #2024-02-20 somewhere around here there will be if/else logic for defining the times to be used for fitting
+    # if/else logic for defining the times used for fitting
     if FIREXint:
         # Identify transition from 1 to 0 and fit 100 points after transition
         transitions = np.where((z_values[:-1] == 1) & (z_values[1:] == 0))[0] + 1
@@ -164,9 +150,9 @@ def FitIRF(data, csv_filename, directory, time_col, IRF_col, calibration_col, FI
         # Always add fit info to list for all segments
         if start_index < end_index:  # Ensure there's data in the segment
             fit_info_list.append([x_values_numeric[start_index], fitted_params[0],fitted_params[1],1-fitted_params[0],fitted_params[2]])
-
+   
+    # Plot IRF
     plt.tight_layout()
-    # plt.show()
 
     # Save the figure as a PNG file in the desired directory
     plt.savefig(os.path.join(directory, 'Figures', f'{base_filename}_InstrumentResponseFunction.png'))
@@ -185,9 +171,9 @@ def Deconvolve_DblExp(wX, wY, wDest, Tau1, A1, Tau2, A2, NIter, SmoothError, poi
     # SmoothError: number of time points to use for error smoothing. Set to 0 for no smoothing
     
     # Delete existing iteration_ii.png debugging files
-    # existing_files = glob.glob("debugplots/iteration_*.png")
-    # for file_path in existing_files:
-    #     os.remove(file_path)
+    existing_files = glob.glob("debugplots/iteration_*.png")
+    for file_path in existing_files:
+         os.remove(file_path)
     
     ForceIterations = 1 if NIter != 0 else 0
     NIter = 100 if NIter == 0 else NIter
@@ -198,16 +184,10 @@ def Deconvolve_DblExp(wX, wY, wDest, Tau1, A1, Tau2, A2, NIter, SmoothError, poi
     # make X data for kernel
     wX_kernel = wX[:N] - wX[0]
     
-    # Calculate the desired number of points per one-second interval
-    
-
     # Create an array of indices for the original and upsampled data
     old_indices = np.arange(len(wX))
     new_indices = np.linspace(0, len(wX) - 1, len(wY) * points_per_interval)
     old_indices_kernel = np.arange(len(wX_kernel))
-    
-    # Introducing debugging statements here:
-    print(f'deconvolving double exponential response from {len(wX)} data points')
 
     new_indices_kernel = np.linspace(0, len(wX_kernel) - 1, len(wX_kernel) * points_per_interval)
 
@@ -259,6 +239,7 @@ def Deconvolve_DblExp(wX, wY, wDest, Tau1, A1, Tau2, A2, NIter, SmoothError, poi
     return wDest
 
 def HV_Deconvolve(wX, wY, wDest, IRF_data, SmoothError, NIter, datafile, directory):
+    """Perfrom deconvolution at each point and return results as wDest"""    
     # Path for saving CSV file
     output_data_dir = directory + '/Output Data/'
     
@@ -468,7 +449,8 @@ def HV_PlotFigures(wX, wY, wDest, directory):
     plt.close()
 
 def HV_ProcessFlights(directory, datafile, NIter, SmoothError, time_col, IRF_col, calibration_col, data_col, data, background_col=None, FIREXint=False):
-
+   
+    """Processes flight data by fitting the Instrument Response Function (IRF) and performing deconvolution"""
     start_time=time_module.time()
 
     base_str = datafile.rstrip('.csv')
@@ -480,12 +462,14 @@ def HV_ProcessFlights(directory, datafile, NIter, SmoothError, time_col, IRF_col
     # Drop rows where there are NaN values
     data = data.dropna(subset=[data_col, IRF_col])
 
+    # Convert time values to Unix timestamps
     wX = [pd.Timestamp(dt64).timestamp() for dt64 in data[time_col].values] 
     wY = data[data_col].values
 
     # Fit the IRF before deconvolution
     FitIRF(data, datafile, directory, time_col, IRF_col, calibration_col, FIREXint=FIREXint) #2024-02-20 optional parameter gets passed through to FitIRF
     
+    # Load IRF data
     IRF_data = pd.read_csv(IRF_filename)
 
     # Deconvolution for CSV data
@@ -498,7 +482,6 @@ def HV_ProcessFlights(directory, datafile, NIter, SmoothError, time_col, IRF_col
     # Calculate the integrals
     integral_wY = trapz(wY,wX)
     integral_wDest = trapz(wDest,wX)
-    
     print("Area ratio: {:.4f}".format(1+(integral_wDest-integral_wY)/integral_wY))
 
     # Calculate the total runtime
@@ -506,5 +489,5 @@ def HV_ProcessFlights(directory, datafile, NIter, SmoothError, time_col, IRF_col
     total_runtime = end_time - start_time
     print("Total runtime: {:.1f} seconds".format(total_runtime))
 
-    # Make sure to return all the expected variables
+    # Return deconvolved data
     return wDest
