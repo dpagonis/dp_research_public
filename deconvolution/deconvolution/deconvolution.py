@@ -1,73 +1,233 @@
+import os
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
-from scipy.optimize import curve_fit
-from scipy.signal import resample
-import pandas as pd
 import time as time_module
-import glob
-import os
-from scipy.integrate import trapz
+from scipy.integrate import trapezoid
+from scipy.optimize import curve_fit
 from scipy import interpolate
 from numba import njit, prange
 
-def AdjGuess(wG, wE, NSmooth):
+
+"""
+Functions that you might be looking for:
+
+- Deconvolve_SingleExp : deconvolve a constant single-exponential instrument response function
+- Deconvolve_DblExp : deconvolve a constant double-exponential instrument response function
+- Deconvolve_DblExp_VariableIRF: determine the variability in the instrument response function (double-exponential) 
+  from prescribed parts of the dataset and deconvolve
+
+Hannah Verhaal and Demetrios Pagonis, Weber State University, 2024
+MIT License 
+
+"""
+
+def Deconvolve_SingleExp(wX, wY, Tau, NIter = 0):
     """
-    Adjusts initial guess array, 'wG', by subtracting error array, 'wE'
+    Deconvolves signal, 'wY', using double exponential kernel at each point
+
+    Parameters:
+    wX (np.ndarray): Array of time values
+    wY (np.ndarray): Array of signal values
+    Tau (float): Time constant for the exponential response function
+
+    Optional parameters:
+    NIter (int): Number of iterations for the deconvolution process. default iterates until solution stabilizes
+
+    Returns:
+    np.ndarray: Deconvolved signal array
+
+    """
+    ForceIterations = 1 if NIter != 0 else 0
+    NIter = 100 if NIter == 0 else NIter
+    
+    time_max = int(10*Tau) # Calculate the desired duration
+    N = np.argmin(np.abs(wX - time_max))
+
+    # make X data for kernel
+    wX_kernel = wX[:N] - wX[0]
+    
+    # Calculate delta_x, the spacing between the points in wX_kernel_upsampled
+    delta_x = wX_kernel[1] - wX_kernel[0]
+    kernel = np.zeros_like(wX_kernel)
+    kernel = np.exp(-wX_kernel / Tau) / Tau
+    kernel /= np.sum(kernel)* delta_x # Normalize kernel
+
+    wError = np.zeros_like(wY)
+    wConv = np.zeros_like(wY)
+    wLastConv = np.zeros_like(wY)
+    wDest = wY
+
+    LastR2 = 0.01
+    R2 = 0.01
+
+
+    for ii in range(NIter):
+        wLastConv[:] = wConv[:]
+        
+        #do the convolution
+        full_conv = np.convolve(wDest, kernel, mode='full')* delta_x
+
+        # Correct the shift for 'full' output by selecting the appropriate portion of the convolution
+        wConv = full_conv[:len(wY)]
+        
+        # Determine error between convoluted signal and original data
+        wError[:] = wConv - wY
+        
+        # Update correlation coefficient
+        LastR2 = R2
+        R2 = np.corrcoef(wConv, wY)[0, 1] ** 2
+        
+        # Check for stopping criteria
+        if ((abs(R2 - LastR2) / LastR2) * 100 > 0.1) or (ForceIterations == 1):
+            wDest[:] = wDest - wError
+        else:
+            print(f"Stopped deconv at N={ii}, %R2 change={(abs(R2 - LastR2) / LastR2) * 100:.3f}")
+            break
+    
+    return wDest
+
+def Deconvolve_DblExp(wX, wY, Tau1, A1, Tau2, A2, NIter = 0):
+    """
+    Deconvolves signal, 'wY', using double exponential kernel at each point
+
+    Parameters:
+    wX (np.ndarray): Array of time values
+    wY (np.ndarray): Array of signal values
+    Tau1 (float): Time constant for the first exponential component
+    A1 (float): Amplitude for the first exponential component
+    Tau2 (float): Time constant for the second exponential component
+    A2 (float): Amplitude for the second exponential component
+    
+    Optional parameters:
+    NIter (int): Number of iterations for the deconvolution process. default iterates until solution stabilizes
+
+    Returns:
+    np.ndarray: Deconvolved signal array
+
+    """
+    ForceIterations = 1 if NIter != 0 else 0
+    NIter = 100 if NIter == 0 else NIter
+    
+    time_max = int(10 * max(Tau1, Tau2)) # Calculate the desired duration
+    N = np.argmin(np.abs(wX - time_max))
+
+    # make X data for kernel
+    wX_kernel = wX[:N] - wX[0]
+    
+    
+    # create normalized kernel
+    delta_x = wX_kernel[1] - wX_kernel[0]
+    kernel = np.zeros_like(wX_kernel)
+    kernel = (A1 / Tau1) * np.exp(-wX_kernel / Tau1) + (A2 / Tau2) * np.exp(-wX_kernel / Tau2)
+    kernel /= np.sum(kernel)* delta_x # Normalize kernel
+
+    wError = np.zeros_like(wY)
+    wConv = np.zeros_like(wY)
+    wLastConv = np.zeros_like(wY)
+    wDest = wY
+
+    LastR2 = 0.01
+    R2 = 0.01
+
+
+    for ii in range(NIter):
+        wLastConv[:] = wConv[:]
+        
+        #do the convolution
+        full_conv = np.convolve(wDest, kernel, mode='full')* delta_x
+
+        # Correct the shift for 'full' output by selecting the appropriate portion of the convolution
+        wConv = full_conv[:len(wY)]
+        
+        # Determine error between convoluted signal and original data
+        wError[:] = wConv - wY
+        
+        # Update correlation coefficient
+        LastR2 = R2
+        R2 = np.corrcoef(wConv, wY)[0, 1] ** 2
+        
+        # Check for stopping criteria
+        if ((abs(R2 - LastR2) / LastR2) * 100 > 0.1) or (ForceIterations == 1):
+            wDest = wDest - wError
+        else:
+            print(f"Stopped deconv at N={ii}, %R2 change={(abs(R2 - LastR2) / LastR2) * 100:.3f}")
+            break
+    
+    return wDest
+
+def Deconvolve_DblExp_VariableIRF(df, directory, base_name, NIter=0, increasing_IRF=False, make_figures=False):
+   
+    """
+    Processes data with variable Instrument Response Functions (IRFs) to determine IRFs and deconvolve them
     
     Parameters:
-    wG (np.ndarray): Initial guess array to be adjusted
-    wE (np.ndarray): Error array to be subtracted from guess
-    NSmooth (int): Optional smoothing parameter
-                - If 0 or 1: No smoothing applied, direct subtraction of error
-                - If > 1: Applies a moving average smoothing to the error before subtraction
+    df (pd.DataFrame): DataFrame containing all original data. Columns: 
+        'time' : datetime objects, evenly spaced
+        'signal' : signal to be deconvolved
+        'IRF_key' : 1/0 flag where 1 indicates the time periods to be used for fitting IRF
+        Optional:
+            'IRF_data' : for cases where IRF is fitted to a different time series than 'signal' (e.g. isotopically labeled calibrant)
+            'bg_key' : 1/0 flag indicating periods where 
+    directory (str): Directory path where output files will be saved
+    basename (str): name to use for writing output data. existing data will be overwritten
     
+    Optional Parameters:
+    NIter (int): Number of iterations for the deconvolution process. default iterates until solution stabilizes
+    increasing_IRF (bool): Flag to determine if specific integration intervals are used, Default False
+    make_figures (bool): Flag to make figures or not
+
     Returns:
-    np.ndarray: Adjusted guess array after error subtraction
+    np.ndarray: Array of deconvolved signal aligned with time series
 
-    Description:
-    Directly modifies guess array 'wG' based on error array 'wE' by the following:
-    - Checking the 'NSmooth' value to determine the smoothing behavior.
-    - If 'NSmooth' is 0 or 1, the function subtracts the error array 'wE' directly from 'wG'.
-    - If 'NSmooth' is greater than 1, it first applies a moving average filter to 'wE' to smooth the error values. Smoothed error is then subtracted from 'wG'.
-    - Subtraction adjusts 'wG' by reducing discrepancies between'wG', and original data
-    - Output is the adjusted 'wG', which represents a guess closer to the true data pattern after accounting for errors
-    """
-    if NSmooth == 0 or NSmooth == 1:
-        wG = wG.astype(float)  # Convert wG to float data type
-        wG -= wE  # subtract errors
-    elif NSmooth > 1:
-        wE_Smooth = np.convolve(wE, np.ones(NSmooth) / NSmooth, mode='same')
-        wG = wG.astype(float)  # Convert wG to float data type
-        wG -= wE_Smooth  # subtract error
-    else:
-        raise ValueError("DP_AdjGuess in DP_Deconvolution was passed a bad value for NSmooth")
-    
-    # Optional: Ensure no negative values in the guess
-    #wG = np.where(wG < 0, 0, wG)
-    return wG
+    Outputs:
+    csv containing deconvolved data
+    csv containing fit parameters and timestamps for IRF: {base_name}_IRF.csv
+    summary figure pngs (optional)
 
-def DP_DblExp_NormalizedIRF(x, A1, tau1, tau2):
     """
-    Determines double exponential decay function, normalized by amplitudes
-    
-    Parameters:
-    x (np.ndarray or float): Input array representing time
-    A1 (float): Amplitude of the first exponential component, between 0 and 1
-    tau1 (float): Time constant for the first exponential decay
-    tau2 (float): Time constant for the second exponential decay
-    
-    Returns:
-    np.ndarray or float: Calculated values of double exponential function for each input in 'x'
+    start_time=time_module.time()
 
-    Description:
-    Models signal decay using two exponential components combined into a single function by the following:
-    - Multiplying the amplitude 'A1' by an exponential decay function of 'x' over 'tau1'
-    - Adding result to the product of (1 - A1) and another exponential decay function of 'x' over 'tau2'
-    """
+    if 'IRF_data' not in df.columns:
+        df['IRF_data']=df['signal']
+
+    # Drop rows where there are NaN values
+    data = df.dropna(subset=['signal', 'IRF_data'])
+
+    # Convert time values to Unix timestamps
+    wX = [pd.Timestamp(dt64).timestamp() for dt64 in data['time'].values] 
+    wY = data['signal'].values
+
+    # Fit the IRF before deconvolution
+    df_IRF = FitIRFs_DblExp(df, directory, base_name, increasing_IRF=increasing_IRF, make_figures=make_figures) 
+
+    wDest = HV_Deconvolve(df, df_IRF, directory, base_name, NIter)
+
+    if make_figures:
+        HV_PlotFigures(wX, wY, wDest, directory, base_name)
+
+    # Calculate the integrals
+    integral_wY = trapezoid(wY,wX)
+    integral_wDest = trapezoid(wDest,wX)
+    print("Area ratio, deconvolution/original: {:.4f}".format(integral_wDest/integral_wY))
+
+    # Calculate the total runtime
+    end_time = time_module.time()
+    total_runtime = end_time - start_time
+    print("Total runtime: {:.1f} seconds".format(total_runtime))
+
+    # Return deconvolved data
+    return wDest
+
+
+def DP_DblExp_NormalizedIRF_dec(x, A1, tau1, tau2):
     return A1 * np.exp(-x / tau1) + (1 - A1) * np.exp(-x / tau2)
 
-def DP_FitDblExp(wY, wX, PtA=None, PtB=None, x0=None, x1=None, y0=None, y1=None, A1=None, tau1=None, tau2=None):
+def DP_DblExp_NormalizedIRF_inc(x, A1, tau1, tau2):
+    return 1 - A1 * np.exp(-x / tau1) - (1 - A1) * np.exp(-x / tau2)
+
+def DP_FitDblExp(wY, wX, PtA=None, PtB=None, x0=None, x1=None, y0=None, y1=None, A1=None, tau1=None, tau2=None, increasing_IRF=False):
     """
     Fits a double exponential decay function to signal, 'wY', against time, 'wX'
     
@@ -83,6 +243,7 @@ def DP_FitDblExp(wY, wX, PtA=None, PtB=None, x0=None, x1=None, y0=None, y1=None,
     A1 (float, optional): Initial guess for the amplitude of the first exponential component. Defaults to 0.5
     tau1 (float, optional): Initial guess for the time constant of the first exponential component. Defaults to 1
     tau2 (float, optional): Initial guess for the time constant of the second exponential component. Defaults to 80
+    increasing_IRF (bool, optional): flag for direction of step change
     
     Returns:
     A tuple containing:
@@ -145,79 +306,63 @@ def DP_FitDblExp(wY, wX, PtA=None, PtB=None, x0=None, x1=None, y0=None, y1=None,
     
     # Fit the double exponential curve
     p0 = [A1, tau1, tau2]
+
+    if increasing_IRF:
+        fit_func = DP_DblExp_NormalizedIRF_inc
+    else:
+        fit_func = DP_DblExp_NormalizedIRF_dec
     
-    popt, pcov = curve_fit(DP_DblExp_NormalizedIRF, wX[PtA:PtB+1] - x0, wY_norm, p0=p0, bounds=([0,0,0],[1,3600,3600]))
+    popt, pcov = curve_fit(fit_func, wX[PtA:PtB+1] - x0, wY_norm, p0=p0, bounds=([0,0,0],[1,3600,3600]))
 
     # Generate the fitted curve
     fitX = wX[PtA:PtB+1]
-    fitY = DP_DblExp_NormalizedIRF(fitX - x0, *popt) * (NormFactor - y0) + y0
+    fitY = fit_func(fitX - x0, *popt) * (NormFactor - y0) + y0
     
     return popt, pcov, fitX, fitY
 
-def FitIRF(data, csv_filename, directory, time_col, IRF_col, calibration_col, FIREXint=False): 
+def FitIRFs_DblExp(df, directory, base_name, increasing_IRF, make_figures): 
     """
     Fits instrument response functions (IRFs) to time-resolved segments of signal based on calibration flags
 
     Parameters:
-    data (pd.DataFrame): Input dataset containing time series and IRF data
-    csv_filename (str): Name of input CSV file
+    df (pd.DataFrame): Input dataset containing time series and IRF keys
     directory (str): Directory path where output files will be saved
-    time_col (str): Column name for time values in dataset
-    IRF_col (str): Column name for IRF values in dataset
-    calibration_col (str): Column name for calibration flags in dataset
-    FIREXint (bool, optional): Flag to determine fitting logic
-                                - If TRUE, identifies transitions from 1 to 0
-                                - Defaults to False
+    base_name (str): base name for output files
+    increasing_IRF (bool): Flag to determine fitting logic
+        - If TRUE, fits IRF to a step-function increase in concentration
+        - If FALSE (default behavior), fits IRF to a step-function decrease in concentration
 
     Returns:
-    None: Function saves fitted IRF plots and parameters to the specified directory
+    IRF dataframe
     
-    Description:
-    IRFs are fit by the following steps:
-    - Identify fitting intervals based on calibration flags and the FIREXint flag
-    - Fit a double exponential decay model to data within each interval
-    - Plot and save fitted models with original data for comparison
-    - Fit parameters saved in CSV file and plots saved as PNG files
     """
-    # Derive base_filename from csv_filename
-    base_filename = csv_filename.rstrip('.csv')
 
-    # Extract the x, y, and z values from the data
-    x_values_datetime = data[time_col].values  # Use the correct column name from the function parameter
+    # Extract necessary data from the dataframe
+    x_values_datetime = df['time'].values 
     x_values_numeric = np.array([(date - np.datetime64('1970-01-01T00:00:00')).astype('timedelta64[s]').astype(float) for date in x_values_datetime])
-    y_values = data[IRF_col].values
-    z_values = data[calibration_col].values
+    y_values = df['IRF_data'].values
+    IRF_key = df['IRF_key'].values
 
+    #track down all the periods where we need to fit an IRF
     intervals = []
 
-    # if/else logic for defining the times used for fitting
-    if FIREXint:
-        # Identify transition from 1 to 0 and fit 100 points after transition
-        transitions = np.where((z_values[:-1] == 1) & (z_values[1:] == 0))[0] + 1
-        starts = transitions
-        # Calculate ends directly, vectorized manner
-        ends = np.minimum(transitions + 100, len(z_values))
-        intervals = list(zip(transitions, ends))
-    else:
-        # Fit where 'zero flag' == 1
-        starts = np.where((z_values[:-1] == 0) & (z_values[1:] == 1))[0] + 1
-        ends = np.where((z_values[:-1] == 1) & (z_values[1:] == 0))[0] + 1
+    starts = np.where((IRF_key[:-1] == 0) & (IRF_key[1:] == 1))[0] + 1
+    ends = np.where((IRF_key[:-1] == 1) & (IRF_key[1:] == 0))[0] + 1
 
-        if z_values[0] == 1:
-            starts = np.insert(starts, 0, 0)
-        if z_values[-1] == 1:
-            ends = np.append(ends, len(z_values))
+    if IRF_key[0] == 1:
+        starts = np.insert(starts, 0, 0)
+    if IRF_key[-1] == 1:
+        ends = np.append(ends, len(IRF_key))
 
-        for start, end in zip(starts, ends):
-            intervals.append((start, end))   
+    for start, end in zip(starts, ends):
+        intervals.append((start, end))   
 
-    # Adjust for only displaying the first few IRFs
-    display_limit = 10
-    num_columns = 2
-    num_rows = min(len(starts), display_limit)
-    num_rows = (num_rows + num_columns - 1) // num_columns
+    # set up the big IRF figure
+    if make_figures:
+        num_columns = 2
+        num_rows = int(np.ceil(len(intervals)/2))
 
-    fig, axes = plt.subplots(num_rows, num_columns, figsize=(12, 10), squeeze=False)  # Ensure axes is always 2D
+        fig, axes = plt.subplots(num_rows, num_columns, figsize=(12, 2*num_rows), squeeze=False) 
 
     fit_info_list = [['time', 'A1', 'Tau1', 'A2', 'Tau2']]
 
@@ -226,16 +371,15 @@ def FitIRF(data, csv_filename, directory, time_col, IRF_col, calibration_col, FI
         
         x_subset_numeric = x_values_numeric[start_index:end_index]
         y_subset = y_values[start_index:end_index]
-        fitted_params, covariance, fitX, fitY = DP_FitDblExp(y_subset, x_subset_numeric) 
+        fitted_params, _, _, fitY = DP_FitDblExp(y_subset, x_subset_numeric, increasing_IRF) 
         
-        if i < display_limit:  # Limit plotting to first 5 fits
+        if make_figures:
             ax = axes[i // num_columns, i % num_columns]
             ax.scatter(x_values_datetime[start_index:end_index], y_subset, label='Signal', color='blue')
             ax.plot(x_values_datetime[start_index:end_index], fitY, label='Fitted IRF', color='black')
 
             ax.set_xlabel('Time')
-            ax.set_ylabel('Signal (ncps)')
-            ax.set_title(f'Cal {i + 1}')
+            ax.set_ylabel('Signal')
             ax.legend()
 
             fit_info = f"A1: {fitted_params[0]:.4f}\nTau1: {fitted_params[1]:.4f}\nA2: {1-fitted_params[0]:.4f}\nTau2: {fitted_params[2]:.4f}"
@@ -246,167 +390,46 @@ def FitIRF(data, csv_filename, directory, time_col, IRF_col, calibration_col, FI
         if start_index < end_index:  # Ensure there's data in the segment
             fit_info_list.append([x_values_numeric[start_index], fitted_params[0],fitted_params[1],1-fitted_params[0],fitted_params[2]])
    
-    # Plot IRF
-    plt.tight_layout()
 
-    # Save the figure as a PNG file in the desired directory
-    plt.savefig(os.path.join(directory, 'Figures', f'{base_filename}_InstrumentResponseFunction.png'))
-    plt.close(fig)
+    if make_figures:
+        plt.tight_layout()
+        plt.savefig(os.path.join(directory, f'{base_name}_IRF.png'))
+        plt.close(fig)
 
     # Save the fit information as a CSV file
     fit_info_df = pd.DataFrame(fit_info_list)
+    fit_info_df.to_csv(os.path.join(directory, f'{base_name}_IRF.csv'), index=False)    
 
-    fit_info_df.to_csv(os.path.join(directory, 'Output Data', f'{base_filename}_InstrumentResponseFunction.csv'), index=False, header=False)    
-
-def Deconvolve_DblExp(wX, wY, wDest, Tau1, A1, Tau2, A2, NIter, SmoothError, points_per_interval = 0):
-    """
-    Deconvolves signal, 'wY', using double exponential kernel at each point
-
-    Parameters:
-    wX (np.ndarray): Array of time values
-    wY (np.ndarray): Array of signal values
-    wDest (np.ndarray): Array to store deconvolved signal
-    Tau1 (float): Time constant for the first exponential component
-    A1 (float): Amplitude for the first exponential component
-    Tau2 (float): Time constant for the second exponential component
-    A2 (float): Amplitude for the second exponential component
-    NIter (int): Number of iterations for the deconvolution process
-    SmoothError (int): Smoothing factor applied to error in each iteration
-    points_per_interval (int, optional): Number of points per interval for upsampling. Defaults to 0
-
-    Returns:
-    np.ndarray: Deconvolved signal array
-
-    Description:
-    Iteratively deconvolves signal based on IRF's through the following steps:
-    - Upsampling original signal
-    - Defining IRF using amplitudes and decay constants, then convolving kernel with the upsampled signal
-    - Comparing convolved signal with upsampled original to compute errors, which are then smoothed if specified
-    - Adjusting deconvolved signal estimate iteratively based on the smoothed errors, refining the estimate to minimize errors
-    - Iterations continue until the change in the correlation coefficient between consecutive iterations is less than 0.1%
-    - Deconvolved signal is downsampled back to original resolution
-    """
-    # Delete existing iteration_ii.png debugging files
-    existing_files = glob.glob("debugplots/iteration_*.png")
-    for file_path in existing_files:
-         os.remove(file_path)
-    
-    ForceIterations = 1 if NIter != 0 else 0
-    NIter = 100 if NIter == 0 else NIter
-    
-    time_max = int(10 * max(Tau1, Tau2)) # Calculate the desired duration
-    N = np.argmin(np.abs(wX - time_max))
-
-    # make X data for kernel
-    wX_kernel = wX[:N] - wX[0]
-    
-    # Create an array of indices for the original and upsampled data
-    old_indices = np.arange(len(wX))
-    new_indices = np.linspace(0, len(wX) - 1, len(wY) * points_per_interval)
-    old_indices_kernel = np.arange(len(wX_kernel))
-
-    new_indices_kernel = np.linspace(0, len(wX_kernel) - 1, len(wX_kernel) * points_per_interval)
-
-    # Upsample
-    wY_upsampled = np.interp(new_indices, old_indices, wY)
-    wX_kernel_upsampled = np.interp(new_indices_kernel, old_indices_kernel, wX_kernel)
-    
-    # Calculate delta_x, the spacing between the points in wX_kernel_upsampled
-    delta_x = wX_kernel_upsampled[1] - wX_kernel_upsampled[0]
-
-    kernel = np.zeros_like(wX_kernel_upsampled)
-    wError = np.zeros_like(wY_upsampled)
-    wConv = np.zeros_like(wY_upsampled)
-    wLastConv = np.zeros_like(wY_upsampled)
-    wDest_upsampled = wY_upsampled
-
-    LastR2 = 0.01
-    R2 = 0.01
+    return pd.read_csv(os.path.join(directory, f'{base_name}_IRF.csv'),header=1)
 
 
-    for ii in range(NIter):
-        wLastConv[:] = wConv[:]
-        
-        # define the kernel (instrument response function) and do the convolution
-        kernel = (A1 / Tau1) * np.exp(-wX_kernel_upsampled / Tau1) + (A2 / Tau2) * np.exp(-wX_kernel_upsampled / Tau2)
-        kernel /= np.sum(kernel)* delta_x # Normalize kernel
-        full_conv = np.convolve(wDest_upsampled, kernel, mode='full')* delta_x
 
-        # Correct the shift for 'full' output by selecting the appropriate portion of the convolution
-        wConv = full_conv[:len(wY_upsampled)]
-        
-        # Determine error between convoluted signal and original data
-        wError[:] = wConv - wY_upsampled
-        
-        # Update correlation coefficient
-        LastR2 = R2
-        R2 = np.corrcoef(wConv, wY_upsampled)[0, 1] ** 2
-        
-        # Check for stopping criteria
-        if ((abs(R2 - LastR2) / LastR2) * 100 > 0.1) or (ForceIterations == 1):
-            wDest_upsampled = AdjGuess(wDest_upsampled, wError, SmoothError*points_per_interval)
-        else:
-            print(f"Stopped deconv at N={ii}, %R2 change={(abs(R2 - LastR2) / LastR2) * 100:.3f}")
-            break
-    
-    #downsample 
-    wDest = resample(wDest_upsampled, len(wX))
-    
-    return wDest
-
-def HV_Deconvolve(wX, wY, wDest, IRF_data, SmoothError, NIter, datafile, directory, debug_plots=False): 
+def HV_Deconvolve(df_data, df_IRF, directory, base_name, NIter): 
     """Performs iterative deconvolution on signal using provided IRF
 
     Parameters:
     wX (np.ndarray): Array of time values corresponding to wY
     wY (np.ndarray): Array of signal values to be deconvovled
-    wDest (np.ndarray): Array to store deconvolved signal
-    IRF_data (np.ndarray): Array of IRF values
-    SmoothError (int): Smoothing factor applied to error in each iteration
-    NIter (int): Number of iterations to perform in deconvolution process
-    datafile (str): Path to file used for output file naming
+    df_IRF (pd.DataFrame): IRF fit result dataframe
     directory (str): Base directory path where output files will be stored
-    debug_plots (bool, optional): Flag to control creation of debugging plots, Default False
+    basename (str): base name for file outputs
+    NIter (int): Number of iterations to perform in deconvolution process
     
     Returns:
-    np.ndarray: Array containing deconvovled signal
+    np.ndarray: Array containing deconvolved signal
 
-    Description:
-    Deconvolves signal by the following steps:
-    - Upsampling original signal 
-    - Convolving the upsampled signal with the IRF
-    - Calculating the error between convoluted signal and upsampled original
-    - Iteratively adjusting deconvolved signal guess based on smoothed error
-    - Repeating process for a specified number of iterations, or until changes in the correlation coefficient between iterations fall below 0.1%
-    - Downsampling deconvolved signal to original resolution
     """    
-    # Path for saving CSV file
-    output_data_dir = directory + '/Output Data/'
-    
-    # Delete existing iteration_ii.png debugging files if debug_plots is True
-    if debug_plots:
-        existing_files = glob.glob("debugplots/iteration_*.png")
-        for file_path in existing_files:
-            os.remove(file_path)
-        
+    # Convert time values to Unix timestamps
+    wX = [pd.Timestamp(dt64).timestamp() for dt64 in df_data['time'].values] 
+    wY = df_data['signal'].values
+
     ForceIterations = 1 if NIter != 0 else 0
     NIter = 100 if NIter == 0 else NIter
 
-    # Calculate the desired number of points per one-second interval
-    points_per_interval = 10
-
-    # Create an array of indices for the original and upsampled data
-    old_indices = np.arange(len(wX))
-    new_indices = np.linspace(0, len(wX) - 1, len(wY) * points_per_interval)
-
-    # Upsample
-    wY_upsampled = np.interp(new_indices, old_indices, wY)
-    wX_upsampled = np.interp(new_indices, old_indices, wX)
-
-    wError = np.zeros_like(wY_upsampled)
-    wConv = np.zeros_like(wY_upsampled)
-    wLastConv = np.zeros_like(wY_upsampled)
-    wDest_upsampled = wY_upsampled
+    wError = np.zeros_like(wY)
+    wConv = np.zeros_like(wY)
+    wLastConv = np.zeros_like(wY)
+    wDest = wY
 
     LastR2 = 0.01
     R2 = 0.01
@@ -415,40 +438,26 @@ def HV_Deconvolve(wX, wY, wDest, IRF_data, SmoothError, NIter, datafile, directo
         wLastConv[:] = wConv[:]
 
         # Do the convolution
-        wConv = HV_Convolve(wX_upsampled, wY_upsampled, IRF_data)
-        wConv = wConv/points_per_interval
+        wConv = HV_Convolve(wX, wY, df_IRF)
 
-        wError[:] = wConv - wY_upsampled
+        wError[:] = wConv - wY
         LastR2 = R2
-        R2 = np.corrcoef(wConv, wY_upsampled)[0, 1] ** 2
+        R2 = np.corrcoef(wConv, wY)[0, 1] ** 2
         
         if ((abs(R2 - LastR2) / LastR2) * 100 > 1) or (ForceIterations == 1):
-            wDest_upsampled = AdjGuess(wDest_upsampled, wError, SmoothError)
+            wDest = wDest - wError
         else:
             print(f"Stopped deconv at N={ii}, %R2 change={(abs(R2 - LastR2) / LastR2) * 100:.3f}")
             break
 
-        # Make and save figure showing progress for debugging if debug_plots is True
-        if debug_plots:
-            fig, axs = plt.subplots() 
-            axs.plot(wY_upsampled, color='blue', label='Data')
-            axs.plot(wError, color='red', label='Error')
-            axs.plot(wDest_upsampled, color='green', label='Deconvolved')
-            axs.plot(wConv, color='purple', label='Reconstructed Data')
-            axs.legend()
-            fig.savefig(f'debugplots/iteration_{ii}.png')
-            plt.close(fig)  
-            
-    #downsample
-    wDest = resample(wDest_upsampled, len(wX))
-
-    # Extracting date from input CSV filename
-    date_str = datafile[:10]
-
     # Save to CSV
-    output_df = pd.DataFrame({'time': wX, 'Deconvolved Data': wDest})
+    if 'bg_key' in df_data.columns:
+        wDest_bgsub, bg = HV_BG_subtract_data(wX, wDest, df_data['bg_key'].values)
+        output_df = pd.DataFrame({'time': wX, 'deconvolution': wDest, 'deconvolution_bgsub' : wDest_bgsub, 'background_signal' : bg})
+    else:
+        output_df = pd.DataFrame({'time': wX, 'deconvolution': wDest})
 
-    output_filename = f"{output_data_dir}{date_str}_Deconvolved_Data.csv"
+    output_filename = os.path.join(directory,f'{base_name}_outputdata.csv')
     output_df.to_csv(output_filename, index=False)
     
     return wDest
@@ -492,6 +501,7 @@ def HV_Convolve_chunk(wX, wY, A1, A2, Tau1, Tau2, wConv, start, end):
         num_steps = int(10 * max_tau / spacing)
         wX_kernel = np.linspace(0, 10 * max_tau, num_steps)
         wKernel = (A1_i / Tau1_i) * np.exp(-wX_kernel / Tau1_i) + (A2_i / Tau2_i) * np.exp(-wX_kernel / Tau2_i)
+        wKernel /= np.sum(wKernel)/spacing
         wKernel = np.flip(wKernel)
 
         # Pad wY_i manually if necessary
@@ -505,6 +515,7 @@ def HV_Convolve_chunk(wX, wY, A1, A2, Tau1, Tau2, wConv, start, end):
 
         # Perform the convolution
         wConv[idx] = np.dot(wY_i, wKernel)
+    return wConv
 
 def HV_Convolve(wX, wY, IRF_Data):
     """
@@ -542,16 +553,35 @@ def HV_Convolve(wX, wY, IRF_Data):
 
     # Prepare destination array
     wConv = np.zeros_like(wY)
-
-    # Set chunk size
     chunk_size = 1000
 
     # Process signal in chunks
     for start in range(0, len(wX), chunk_size):
         end = min(start + chunk_size, len(wX))  # Ensure the last chunk doesn't exceed the length of wX
-        HV_Convolve_chunk(wX, wY, A1, A2, Tau1, Tau2, wConv, start, end)
+        wConv = HV_Convolve_chunk(wX, wY, A1, A2, Tau1, Tau2, wConv, start, end)
 
     return wConv
+
+def HV_PlotFigures(wX, wY, wDest, directory, base_name):
+       
+    # Convert timestamps back to datetime
+    times = pd.to_datetime(wX, unit='s')
+    
+    # Plot original, deconvolved signal vs. time
+    plt.figure(figsize=(10, 6))
+    plt.plot(times, wY, label='Original Data')
+    plt.plot(times, wDest, label='Deconvolved Data')
+    plt.xlabel('Time')
+    plt.ylabel('Signal')
+    plt.title('Original and Deconvolved Signal')
+    plt.legend()
+    plt.tight_layout()
+    
+    # Save the figure
+    fig_save_path = os.path.join(directory, f"{base_name}_SummaryFigure.png")
+    plt.savefig(fig_save_path)
+    plt.close()
+
 
 def HV_BG_subtract_data(wX, wY, background_key):
     """
@@ -571,7 +601,6 @@ def HV_BG_subtract_data(wX, wY, background_key):
     Interpolated background is subtracted from signal 'wY' by the following:
     - Checking inputs and converting to lists if necessary
     - Interpolating background values with 'HV_interpolate_background' to get background averages, times
-    - Subtracting interpolated background from 'wY' with 'HV_subtract_background'
     - Returning background-subtracted signal and interpolated background values
     """
     # Check if inputs are pandas Series and convert to lists if necessary
@@ -582,14 +611,15 @@ def HV_BG_subtract_data(wX, wY, background_key):
     if isinstance(background_key, pd.Series):
         background_key = background_key.values.tolist()
 
-    background_averages, background_average_times = HV_interpolate_background(wX, wY, background_key)
+    background_averages, background_average_times = HV_average_background(wX, wY, background_key)
     
     # Subtract interpolated background
-    wY_subtracted_bg, background_values_interpolated = HV_subtract_background(wX, wY, background_averages, background_average_times)
+    background_values_interpolated = np.interp(wX, background_average_times, background_averages)
+    wY_subtracted_bg = wY - background_values_interpolated
 
     return wY_subtracted_bg, background_values_interpolated
 
-def HV_interpolate_background( wX, processed_wY, processed_background_key):
+def HV_average_background( wX, processed_wY, processed_background_key):
     """
     Interpolates background values from signal
 
@@ -644,143 +674,3 @@ def HV_interpolate_background( wX, processed_wY, processed_background_key):
         background_averages.append(segment_average)
         
     return background_averages, background_average_times
-
-def HV_subtract_background(wX, wY, background_averages, background_average_times):
-    """
-    Subtracts interpolated background values from signal
-
-    Parameters:
-    wX (np.ndarray): Array of time values
-    wY (np.ndarray): Array of signal values
-    background_averages (list): List of average background signal values for each segment
-    background_average_times (list): List of average time points corresponding to each background segment
-
-    Returns:
-    tuple containing:
-    - np.ndarray: Array of signal values with background subtracted
-    - np.ndarray: Array of interpolated background values
-
-    Description:
-    Subtracts background from 'wY' by the following:
-    - Interpolating background averages over entire dataset
-    - Subtracting interpolated background values from 'wY'
-    - Returning background-subtracted signal and interpolated background values
-    """
-    # Interpolate the background averages over the entire dataset
-    background_values_interpolated = np.interp(wX, background_average_times, background_averages)
-
-    # Subtract interpolated background from signal
-    wY_subtracted_bg = wY - background_values_interpolated
-
-    return wY_subtracted_bg, background_values_interpolated
-
-def HV_PlotFigures(wX, wY, wDest, directory):
-    """
-    Plots original, deconvolved signals vs. time, saves plot to specified directory
-
-    Parameters:
-    wX (np.ndarray): Array of Unix timestamps 
-    wY (np.ndarray): Array of original signal values
-    wDest (np.ndarray): Array of deconvolved signal values
-    directory (str): Base directory where plot will be saved as PNG
-
-    Description:
-    Generates a plot of original and deconvovled signals by the following:
-    - Creating directory to save figures
-    - Converting Unix timestamps in 'wX' to datetime format
-    - Plotting original signal 'wY' and deconvolved signal 'wDest'against time
-    - Saving plot as PNG file in specified directory
-    """
-    # Directory to save figures
-    save_dir = directory + "/Figures/"
-    
-    # Convert timestamps back to datetime
-    times = pd.to_datetime(wX, unit='s')
-    
-    # Plot original, deconvolved signal vs. time
-    plt.figure(figsize=(10, 6))
-    plt.plot(times, wY, label='Original Data')
-    plt.plot(times, wDest, label='Deconvolved Data')
-    plt.xlabel('Time')
-    plt.ylabel('Signal')
-    plt.title('Original and Deconvolved Signal')
-    plt.legend()
-    plt.tight_layout()
-    
-    # Save the figure
-    fig_save_path = os.path.join(save_dir, "Original_and_Deconvolved_Signal.png")
-    plt.savefig(fig_save_path)
-    plt.close()
-
-def HV_ProcessFlights(directory, datafile, NIter, SmoothError, time_col, IRF_col, calibration_col, data_col, data, background_col=None, FIREXint=False):
-   
-    """
-    Processes flight data by fitting Instrument Response Functions (IRFs) and performing deconvolution
-    
-    Parameters:
-    directory (str): Directory path where output files will be saved
-    datafile (str): Name of CSV file containing data
-    NIter (int): Number of iterations for the deconvolution process
-    SmoothError (int): Smoothing factor applied to error in each iteration
-    time_col (str): Column in dataset that contains time data
-    IRF_col (str): Column in dataset containing IRF fitting data
-    calibration_col (str): Column containing calibration flags
-    data_col(str): Column containing signal
-    data (pd.DataFrame): DataFrame containing all original data
-    background_col (str, optional): Column containing background flags
-    FIREXint (bool, optional): Flag to determine if specific integration intervals are used, Default False
-
-    Returns:
-    np.ndarray: Array of deconvolved signal aligned with time series
-
-    Description:
-    Processes flight data by the following:
-    - Creating output directory path, determining IRF filename
-    - Dropping rows in DataFrame with NaN values
-    - Converting time values in 'wX' to timestamps
-    - Fitting IRF before deconvolution with 'FitIRF' function
-    - Performing deconvolution of signal with 'HV_Deconvolve' function
-    - Plotting original, deconvolved signals versus time with 'HV_PlotFigures' function
-    - Calculating area ratio of original and deconvolved signal
-    - Returning deconvovled signal in 'wDest' array
-    """
-    start_time=time_module.time()
-
-    base_str = datafile.rstrip('.csv')
-
-    # Create output directory path
-    output_directory = os.path.join(directory, 'Output Data')
-    IRF_filename = os.path.join(output_directory, f'{base_str}_InstrumentResponseFunction.csv')
-
-    # Drop rows where there are NaN values
-    data = data.dropna(subset=[data_col, IRF_col])
-
-    # Convert time values to Unix timestamps
-    wX = [pd.Timestamp(dt64).timestamp() for dt64 in data[time_col].values] 
-    wY = data[data_col].values
-
-    # Fit the IRF before deconvolution
-    FitIRF(data, datafile, directory, time_col, IRF_col, calibration_col, FIREXint=FIREXint) 
-    
-    # Load IRF data
-    IRF_data = pd.read_csv(IRF_filename)
-
-    # Deconvolution for CSV data
-    wDest = np.zeros_like(wY)
-    wDest = HV_Deconvolve(wX, wY, wDest, IRF_data, SmoothError, NIter, datafile, directory)
-
-    # Plot Signal versus time
-    HV_PlotFigures(wX, wY, wDest, directory)
-
-    # Calculate the integrals
-    integral_wY = trapz(wY,wX)
-    integral_wDest = trapz(wDest,wX)
-    print("Area ratio: {:.4f}".format(1+(integral_wDest-integral_wY)/integral_wY))
-
-    # Calculate the total runtime
-    end_time = time_module.time()
-    total_runtime = end_time - start_time
-    print("Total runtime: {:.1f} seconds".format(total_runtime))
-
-    # Return deconvolved data
-    return wDest
