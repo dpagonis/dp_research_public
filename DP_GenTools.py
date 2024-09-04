@@ -67,6 +67,7 @@ def DP_TUV_ActinicFlux(latitude, longitude, date, timeStamp, kmAltitude, ozone =
         
     timeStamp : str
         Time for the calculation in 'HH:MM:SS' format.
+        timeStamp must be UTC
         
     kmAltitude : float
         Altitude in kilometers for the measurement point. Should be a non-negative float.
